@@ -5,8 +5,8 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 ## Roadmap
 - [x] Character tokenizer
 - [x] Bigram baseline
-- [ ] Embeddings + position information
-- [ ] Self-attention
+- [x] Embeddings + position information
+- [x] Self-attention
 - [ ] Multi-head attention
 - [ ] Transformer block
 - [ ] Stacked blocks -> Tiny GPT
