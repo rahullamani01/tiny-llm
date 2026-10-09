@@ -1,13 +1,14 @@
 import torch
 from tokenizer.tokenizer import CharTokenizer
 from training.dataset import get_batch
-from model.model import BigramLanguageModel
+from model.model import AttentionLanguageModel
 
 # hyperparameters
 batch_size = 32
-block_size = 8
+block_size = 32
+n_embd = 32
 max_steps = 5000
-lr = 1e-2
+lr = 1e-3
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 # data
@@ -18,7 +19,7 @@ n = int(0.9 * len(data))
 train_data, val_data = data[:n], data[n:]
 
 # model + optimizer
-model = BigramLanguageModel(tok.vocab_size).to(device)
+model = AttentionLanguageModel(tok.vocab_size, block_size, n_embd).to(device)
 opt = torch.optim.AdamW(model.parameters(), lr=lr)
 
 for step in range(max_steps):
