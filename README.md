@@ -7,11 +7,11 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 - [x] Bigram baseline
 - [x] Embeddings + position information
 - [x] Self-attention
-- [ ] Multi-head attention
-- [ ] Transformer block
-- [ ] Stacked blocks -> Tiny GPT
-- [ ] Training
-- [ ] Text generation (temperature, top-k)
+- [x] Multi-head attention
+- [x] Transformer block
+- [x] Stacked blocks -> Tiny GPT
+- [x] Training
+- [x] Text generation (temperature, top-k)
 
 ## Setup
 ```bash
