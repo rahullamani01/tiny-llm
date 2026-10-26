@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model.attention import Head
 from model.embeddings import Embeddings
+from model.sampling import sample_next_token
 from model.transformer import Block
 
 
@@ -91,15 +92,56 @@ class TinyGPT(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
-        """Sample tokens one at a time. Call model.eval() first."""
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.block_size:]                # crop to the context window
-            logits, _ = self(idx_cond)
-            logits = logits[:, -1, :] / max(temperature, 1e-6)  # <1 = safer, >1 = wilder
-            if top_k is not None:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = float("-inf")     # drop all but the top k
-            probs = F.softmax(logits, dim=-1)
-            idx = torch.cat([idx, torch.multinomial(probs, 1)], dim=1)
-        return idx
+    def generate(
+        self,
+        idx,
+        max_new_tokens,
+        temperature=1.0,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=1.0,
+    ):
+        """Sample tokens one at a time and return the full sequence.
+
+        Call model.eval() first. See model.sampling for the meaning of the
+        sampling options.
+        """
+        out = idx
+        for out in self.generate_stream(
+            idx,
+            max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+        ):
+            pass
+        return out
+
+    def generate_stream(
+        self,
+        idx,
+        max_new_tokens,
+        temperature=1.0,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=1.0,
+    ):
+        """Yield the full sequence after each newly sampled token.
+
+        Useful for streaming output: read the last token of each yield.
+        """
+        with torch.no_grad():
+            for _ in range(max_new_tokens):
+                idx_cond = idx[:, -self.block_size:]  # crop to the context window
+                logits, _ = self(idx_cond)
+                next_id = sample_next_token(
+                    logits[:, -1, :],
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
+                    generated=idx,
+                )
+                idx = torch.cat([idx, next_id], dim=1)
+                yield idx

@@ -15,3 +15,7 @@ class CharTokenizer:
 
     def decode(self, ids: list[int]) -> str:
         return "".join(self.itos[i] for i in ids)
+
+    def missing_chars(self, s: str) -> list[str]:
+        """Characters in `s` that are not part of the vocabulary."""
+        return sorted(set(s) - set(self.stoi))
