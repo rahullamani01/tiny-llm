@@ -63,7 +63,8 @@ class AttentionLanguageModel(nn.Module):
 class TinyGPT(nn.Module):
     """Embeddings -> N transformer blocks -> LayerNorm -> output head."""
 
-    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout=0.0):
+    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout=0.0,
+                 tie_weights=False):
         super().__init__()
         self.block_size = block_size
         self.embed = Embeddings(vocab_size, block_size, n_embd)
@@ -73,6 +74,9 @@ class TinyGPT(nn.Module):
         self.ln_f = nn.LayerNorm(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
         self.apply(self._init_weights)
+        if tie_weights:
+            # Share the token embedding and output projection (GPT-2 style).
+            self.lm_head.weight = self.embed.token_embedding.weight
 
     @staticmethod
     def _init_weights(module):

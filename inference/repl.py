@@ -7,9 +7,8 @@ character at a time. Slash commands change the sampling settings on the fly.
 """
 import argparse
 
-import torch
-
 from inference.generate import load_model, stream_text
+from utils import set_seed
 
 HELP = """commands:
   /temp <x>      temperature (0 = greedy, higher = wilder)
@@ -87,7 +86,7 @@ def main():
     args = parse_args()
     model, tok = load_model(args.ckpt)
     if args.seed is not None:
-        torch.manual_seed(args.seed)
+        set_seed(args.seed)
 
     state = {
         "max_new_tokens": args.tokens,

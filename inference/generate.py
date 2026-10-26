@@ -3,18 +3,16 @@ import argparse
 
 import torch
 
+from checkpoint import load_checkpoint
 from tokenizer.tokenizer import CharTokenizer
 from model.model import TinyGPT
-
-
-def get_device():
-    return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+from utils import get_device, set_seed
 
 
 def load_model(path="checkpoints/tinygpt.pt", device=None):
     """Load a trained TinyGPT and its tokenizer from a checkpoint."""
     device = device or get_device()
-    ckpt = torch.load(path, map_location=device)
+    ckpt = load_checkpoint(path, device)
     model = TinyGPT(**ckpt["config"]).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
@@ -47,7 +45,7 @@ def generate_text(
     device = next(model.parameters()).device
     idx = _encode_prompt(tok, prompt, device)
     if seed is not None:
-        torch.manual_seed(seed)
+        set_seed(seed)
     out = model.generate(
         idx,
         max_new_tokens,
@@ -74,7 +72,7 @@ def stream_text(
     device = next(model.parameters()).device
     idx = _encode_prompt(tok, prompt, device)
     if seed is not None:
-        torch.manual_seed(seed)
+        set_seed(seed)
     for out in model.generate_stream(
         idx,
         max_new_tokens,
