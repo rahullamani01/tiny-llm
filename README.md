@@ -6,6 +6,7 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 
 ## Roadmap
 - [x] Character tokenizer
+- [x] BPE tokenizer (optional)
 - [x] Bigram baseline
 - [x] Embeddings + position information
 - [x] Self-attention
@@ -55,9 +56,33 @@ Checkpoints are written next to `--out` (default `checkpoints/tinygpt.pt`):
 - `best.pt` — best validation loss seen so far
 - `history.json` — loss history used for the training curve
 
+### BPE tokenizer
+
+The default tokenizer is character-level. A BPE vocabulary is optional and
+usually gives ~2x shorter sequences on Shakespeare:
+
+```bash
+# learn 512 tokens (65 characters + 447 merges)
+python -m tokenizer.train_bpe --vocab-size 512 --out checkpoints/bpe.json
+
+# train with it
+python -m training.train --tokenizer bpe --vocab-file checkpoints/bpe.json \
+    --out checkpoints/tinygpt-bpe.pt
+
+# resume with the same vocabulary
+python -m training.train --resume --tokenizer bpe --vocab-file checkpoints/bpe.json \
+    --out checkpoints/tinygpt-bpe.pt --max-steps 8000
+```
+
+If `--vocab-file` does not exist, training learns one from the corpus and saves
+it next to `--out`. `--bpe-max-chars` controls how much text is used to learn
+merges (default 100k). Checkpoints store the tokenizer state, so generation and
+evaluation load the right one automatically.
+
 Resuming requires the same data/vocabulary and architecture; pass `--tie-weights`
-again if the original run used it. The LR schedule is recalculated from
-`--max-steps`, so extending a run starts a fresh decay from the current step.
+again if the original run used it, and pass the same `--tokenizer`/`--vocab-file`
+for BPE runs. The LR schedule is recalculated from `--max-steps`, so extending a
+run starts a fresh decay from the current step.
 
 ## Evaluate
 ```bash
@@ -77,6 +102,9 @@ python -m inference.generate --prompt $'ROMEO:\n' --tokens 300
 
 Sampling knobs:
 ```bash
+# use a BPE checkpoint
+python -m inference.generate --ckpt checkpoints/tinygpt-bpe.pt --prompt $'ROMEO:\n'
+
 # nucleus sampling instead of top-k
 python -m inference.generate --prompt $'ROMEO:\n' --top-p 0.9 --top-k 0
 
@@ -86,7 +114,7 @@ python -m inference.generate --prompt $'ROMEO:\n' --temperature 0
 # discourage repeats and make runs reproducible
 python -m inference.generate --prompt $'ROMEO:\n' --repetition-penalty 1.1 --seed 0
 
-# print each character as soon as it is sampled
+# print each token as soon as it is sampled
 python -m inference.generate --prompt $'ROMEO:\n' --stream
 ```
 
@@ -107,7 +135,7 @@ The same suite runs in GitHub Actions on every push and pull request.
 ## Project layout
 ```
 data/         training text
-tokenizer/    char tokenizer, vocabulary
+tokenizer/    char + BPE tokenizers, vocabulary state
 model/        embeddings, attention, transformer, model, sampling
 training/     dataset batching, schedules, evaluation, training loop
 inference/    text generation, streaming, REPL, evaluation CLI

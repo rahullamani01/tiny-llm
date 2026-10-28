@@ -1,7 +1,12 @@
 """Run every test module without needing pytest: python -m tests.run_all"""
 import importlib
 
-MODULES = ("tests.test_model", "tests.test_generation", "tests.test_training")
+MODULES = (
+    "tests.test_model",
+    "tests.test_generation",
+    "tests.test_training",
+    "tests.test_bpe",
+)
 
 
 def main():

@@ -16,6 +16,7 @@ def save_checkpoint(
     history,
     best_val_loss,
     train_config=None,
+    tokenizer=None,
 ):
     """Write a resumable checkpoint, creating parent directories as needed."""
     payload = {
@@ -31,6 +32,8 @@ def save_checkpoint(
         payload["optimizer"] = optimizer.state_dict()
     if train_config is not None:
         payload["train_config"] = dict(train_config)
+    if tokenizer is not None:
+        payload["tokenizer"] = dict(tokenizer)
 
     parent = os.path.dirname(path)
     if parent:

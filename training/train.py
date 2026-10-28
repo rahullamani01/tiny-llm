@@ -6,7 +6,7 @@ import torch
 
 from checkpoint import load_checkpoint, save_checkpoint
 from model.model import TinyGPT
-from tokenizer.tokenizer import CharTokenizer
+from tokenizer import BPETokenizer, CharTokenizer, load_tokenizer, save_tokenizer
 from training.dataset import get_batch, split_data
 from training.evaluate import evaluate_loss
 from training.schedule import get_lr
@@ -38,6 +38,13 @@ def parse_args():
     p.add_argument("--data", default="data/training.txt")
     p.add_argument("--out", default="checkpoints/tinygpt.pt", help="latest/resumable checkpoint")
     p.add_argument("--best-out", default=None, help="best-val checkpoint (default: next to --out)")
+    p.add_argument("--tokenizer", choices=["char", "bpe"], default="char")
+    p.add_argument("--vocab-size", type=int, default=512,
+                   help="BPE vocabulary size, including base characters")
+    p.add_argument("--bpe-max-chars", type=int, default=100_000,
+                   help="text prefix used to learn BPE merges")
+    p.add_argument("--vocab-file", default=None,
+                   help="BPE vocabulary JSON (default: next to --out)")
     p.add_argument("--resume", action="store_true", help="continue from --out")
     p.add_argument("--tie-weights", action="store_true", help="share token embedding and output weights")
     p.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
@@ -109,6 +116,47 @@ def _checkpoint_matches(ckpt_cfg, model_cfg):
         )
 
 
+def build_tokenizer(args, text):
+    """Build a char tokenizer, or load/train a BPE vocabulary."""
+    if args.tokenizer == "char":
+        return CharTokenizer(text), None
+
+    if args.vocab_size < 1:
+        raise SystemExit("error: --vocab-size must be >= 1")
+    if args.bpe_max_chars < 1:
+        raise SystemExit("error: --bpe-max-chars must be >= 1")
+
+    path = args.vocab_file or os.path.join(
+        os.path.dirname(args.out) or ".", "bpe.json"
+    )
+    if os.path.exists(path):
+        try:
+            tok = load_tokenizer(path)
+        except (OSError, ValueError, KeyError) as e:
+            raise SystemExit(f"error: could not load BPE vocabulary {path}: {e}")
+        if not isinstance(tok, BPETokenizer):
+            raise SystemExit(f"error: {path} does not contain a BPE vocabulary")
+        missing = tok.missing_chars(text)
+        if missing:
+            shown = ", ".join(repr(c) for c in missing)
+            raise SystemExit(f"error: BPE vocabulary is missing data characters: {shown}")
+        print(f"loaded BPE vocabulary: {tok.vocab_size} tokens from {path}")
+        return tok, path
+
+    print(f"training BPE vocabulary (target {args.vocab_size} tokens)...")
+    try:
+        tok = BPETokenizer.train(
+            text,
+            args.vocab_size,
+            max_chars=args.bpe_max_chars,
+        )
+    except ValueError as e:
+        raise SystemExit(f"error: {e}")
+    save_tokenizer(tok, path)
+    print(f"saved BPE vocabulary: {path}")
+    return tok, path
+
+
 def main():
     args = parse_args()
     cfg = {key: getattr(args, key, value) for key, value in CFG.items()}
@@ -133,7 +181,12 @@ def main():
             f"error: data file not found: {args.data}\nrun: python data/download.py"
         )
 
-    tok = CharTokenizer(text)
+    tok, vocab_path = build_tokenizer(args, text)
+    tok_state = tok.to_dict()
+    print(
+        f"tokenizer: {args.tokenizer} | vocab {tok.vocab_size} | "
+        f"chars {len(tok.chars)}"
+    )
     data = torch.tensor(tok.encode(text), dtype=torch.long)
     try:
         splits = split_data(data, cfg["val_fraction"])
@@ -177,9 +230,18 @@ def main():
         if not os.path.exists(args.out):
             raise SystemExit(f"error: no checkpoint at {args.out} to resume from")
         ckpt = load_checkpoint(args.out, device)
-        _checkpoint_matches(ckpt["config"], model_cfg)
-        if list(ckpt["chars"]) != tok.chars:
+        ckpt_tok_state = ckpt.get("tokenizer")
+        if ckpt_tok_state is not None:
+            if ckpt_tok_state != tok_state:
+                kind = ckpt_tok_state.get("type", "unknown")
+                raise SystemExit(
+                    f"error: checkpoint uses a {kind!r} tokenizer that does not match "
+                    f"the current {args.tokenizer!r} tokenizer; pass the original "
+                    "--tokenizer/--vocab-file"
+                )
+        elif list(ckpt["chars"]) != tok.chars:
             raise SystemExit("error: checkpoint vocabulary does not match the data file")
+        _checkpoint_matches(ckpt["config"], model_cfg)
         model.load_state_dict(ckpt["model"])
         if "optimizer" in ckpt:
             opt.load_state_dict(ckpt["optimizer"])
@@ -196,7 +258,14 @@ def main():
         print(f"resumed from {args.out} at step {start_step}")
 
     train_config = dict(cfg)
-    train_config.update(data=args.data, device=str(device), tie_weights=args.tie_weights)
+    train_config.update(
+        data=args.data,
+        device=str(device),
+        tie_weights=args.tie_weights,
+        tokenizer=args.tokenizer,
+        vocab_file=vocab_path,
+        vocab_size=tok.vocab_size,
+    )
 
     def current_lr(step):
         return get_lr(
@@ -234,6 +303,7 @@ def main():
             history,
             best_val,
             train_config,
+            tokenizer=tok_state,
         )
         with open(history_path, "w") as f:
             json.dump(history, f, indent=2)
@@ -267,6 +337,7 @@ def main():
                 history,
                 best_val,
                 train_config,
+                tokenizer=tok_state,
             )
             print(f"  new best -> {best_path}")
         return metrics

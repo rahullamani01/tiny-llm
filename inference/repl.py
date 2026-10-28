@@ -1,7 +1,7 @@
 """Interactive, streaming text-generation REPL.
 
 Type a prompt and the model keeps writing from the running context, one
-character at a time. Slash commands change the sampling settings on the fly.
+token at a time. Slash commands change the sampling settings on the fly.
 
     python -m inference.repl
 """
@@ -155,8 +155,9 @@ def main():
         print()
 
         # Keep a rolling context so the next turn continues the same text.
-        # Char tokenizer: one character == one token, so block_size chars fit.
-        context = (candidate + "".join(generated))[-model.block_size :]
+        # Truncate by tokens, which is exact for both char and BPE tokenizers.
+        text = candidate + "".join(generated)
+        context = tok.decode(tok.encode(text)[-model.block_size :])
 
 
 if __name__ == "__main__":

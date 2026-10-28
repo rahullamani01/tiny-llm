@@ -1,2 +1,2 @@
-# Step later: vocabulary utilities (special tokens, saving/loading the vocab).
-# For now the vocabulary lives inside CharTokenizer.
+# Vocabulary utilities live in tokenizer/__init__.py (JSON state helpers) and
+# tokenizer/bpe.py (learned merges). CharTokenizer itself is in tokenizer.py.

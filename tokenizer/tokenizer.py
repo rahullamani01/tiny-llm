@@ -19,3 +19,10 @@ class CharTokenizer:
     def missing_chars(self, s: str) -> list[str]:
         """Characters in `s` that are not part of the vocabulary."""
         return sorted(set(s) - set(self.stoi))
+
+    def to_dict(self):
+        return {"type": "char", "chars": list(self.chars)}
+
+    @classmethod
+    def from_dict(cls, state):
+        return cls.from_chars(state["chars"])

@@ -4,7 +4,7 @@ import argparse
 import torch
 
 from checkpoint import load_checkpoint
-from tokenizer.tokenizer import CharTokenizer
+from tokenizer import CharTokenizer, tokenizer_from_state
 from model.model import TinyGPT
 from utils import get_device, set_seed
 
@@ -16,7 +16,11 @@ def load_model(path="checkpoints/tinygpt.pt", device=None):
     model = TinyGPT(**ckpt["config"]).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
-    tok = CharTokenizer.from_chars(ckpt["chars"])
+    state = ckpt.get("tokenizer")
+    if state is not None:
+        tok = tokenizer_from_state(state)
+    else:  # legacy char-tokenizer checkpoint
+        tok = CharTokenizer.from_chars(ckpt["chars"])
     return model, tok
 
 
@@ -68,7 +72,7 @@ def stream_text(
     repetition_penalty=1.0,
     seed=None,
 ):
-    """Yield one decoded character at a time as the model samples it."""
+    """Yield one decoded token at a time as the model samples it."""
     device = next(model.parameters()).device
     idx = _encode_prompt(tok, prompt, device)
     if seed is not None:
