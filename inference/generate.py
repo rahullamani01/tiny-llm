@@ -44,6 +44,7 @@ def generate_text(
     top_p=None,
     repetition_penalty=1.0,
     seed=None,
+    use_cache=False,
 ):
     """Generate a completion and return the prompt plus the new text."""
     device = next(model.parameters()).device
@@ -57,6 +58,7 @@ def generate_text(
         top_k=top_k,
         top_p=top_p,
         repetition_penalty=repetition_penalty,
+        use_cache=use_cache,
     )
     return tok.decode(out[0].tolist())
 
@@ -71,6 +73,7 @@ def stream_text(
     top_p=None,
     repetition_penalty=1.0,
     seed=None,
+    use_cache=False,
 ):
     """Yield one decoded token at a time as the model samples it."""
     device = next(model.parameters()).device
@@ -84,6 +87,7 @@ def stream_text(
         top_k=top_k,
         top_p=top_p,
         repetition_penalty=repetition_penalty,
+        use_cache=use_cache,
     ):
         yield tok.decode(out[0, -1:].tolist())
 
@@ -99,6 +103,8 @@ if __name__ == "__main__":
     p.add_argument("--repetition-penalty", type=float, default=1.0, help="1.0 = off")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--stream", action="store_true", help="print tokens as they are sampled")
+    p.add_argument("--kv-cache", action="store_true",
+                   help="reuse attention keys/values between decoding steps")
     a = p.parse_args()
 
     model, tok = load_model(a.ckpt)
@@ -109,6 +115,7 @@ if __name__ == "__main__":
         top_p=a.top_p,
         repetition_penalty=a.repetition_penalty,
         seed=a.seed,
+        use_cache=a.kv_cache,
     )
     try:
         if a.stream:

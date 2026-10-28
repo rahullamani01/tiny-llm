@@ -15,6 +15,7 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 - [x] Stacked blocks -> Tiny GPT
 - [x] Training
 - [x] Text generation (temperature, top-k, top-p, repetition penalty, streaming)
+- [x] Optional KV caching for generation
 - [x] Cosine LR schedule, warmup, gradient clipping
 - [x] Resumable training and best-checkpoint tracking
 - [x] Evaluation (loss and perplexity)
@@ -116,6 +117,9 @@ python -m inference.generate --prompt $'ROMEO:\n' --repetition-penalty 1.1 --see
 
 # print each token as soon as it is sampled
 python -m inference.generate --prompt $'ROMEO:\n' --stream
+
+# reuse attention keys/values between decoding steps
+python -m inference.generate --prompt $'ROMEO:\n' --kv-cache
 ```
 
 Interactive streaming REPL — type a prompt, the model continues the running
@@ -124,6 +128,36 @@ over, and `/quit` to exit:
 ```bash
 python -m inference.repl
 ```
+
+### KV caching (optional)
+
+By default each decoding step recomputes the whole context. `--kv-cache` stores
+each layer's keys and values and forwards only the newest token:
+
+```bash
+python -m inference.generate --prompt $'ROMEO:\n' --tokens 200 --kv-cache
+python -m inference.generate --prompt $'ROMEO:\n' --stream --kv-cache
+python -m inference.repl --kv-cache
+```
+
+In Python, use `model.generate(idx, 200, use_cache=True)` or inspect the cache
+directly with `logits, loss, past = model(idx, use_cache=True)`.
+
+Each layer caches keys/values shaped `[batch, heads, cached_tokens, head_size]`.
+Because the model uses learned absolute positions, attention masks by the
+absolute query position. When the context window slides, the cache is rebuilt
+from the retained tokens, so cached and uncached output stay identical even
+beyond `block_size`; the speedup applies while the sequence fits in the window.
+
+Benchmark both paths on the same workload:
+
+```bash
+python -m experiments.kv_cache_benchmark --prompt-tokens 128 --tokens 128
+```
+
+See [docs/kv_cache.md](docs/kv_cache.md) for the forward-path diagram, tensor
+shapes, mask derivation, context-window policy, measured numbers and the
+cache-memory formula.
 
 ## Tests
 ```bash
@@ -139,7 +173,8 @@ tokenizer/    char + BPE tokenizers, vocabulary state
 model/        embeddings, attention, transformer, model, sampling
 training/     dataset batching, schedules, evaluation, training loop
 inference/    text generation, streaming, REPL, evaluation CLI
-experiments/  attention visualization, temperature test
+experiments/  attention visualization, temperature test, KV-cache benchmark
+docs/         KV-cache design notes
 checkpoints/  saved weights (git-ignored)
 utils.py      device selection and seeding
 checkpoint.py checkpoint save/load

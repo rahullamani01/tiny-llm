@@ -30,3 +30,10 @@ class Block(nn.Module):
         x = x + self.sa(self.ln1(x))     # residual connection around attention
         x = x + self.ffwd(self.ln2(x))   # residual connection around feed-forward
         return x
+
+    def forward_with_cache(self, x, past_kv=None, pos_offset=0):
+        """Forward one block and return its attention cache for this layer."""
+        attn, present = self.sa.forward_with_cache(self.ln1(x), past_kv, pos_offset)
+        x = x + attn
+        x = x + self.ffwd(self.ln2(x))
+        return x, present

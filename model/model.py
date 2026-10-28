@@ -87,12 +87,44 @@ class TinyGPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
-        x = self.embed(idx)        # (B, T, n_embd)
-        x = self.blocks(x)         # N x (attention + feed-forward)
+    def forward(self, idx, targets=None, past_key_values=None, use_cache=False):
+        """Run the transformer.
+
+        Returns ``(logits, loss)`` by default. With ``use_cache=True`` it
+        returns ``(logits, loss, present)``, where ``present`` is a tuple with
+        one ``(keys, values)`` pair per layer, each shaped
+        ``(B, n_head, cached_tokens, head_size)``.
+
+        Pass a previous ``present`` as ``past_key_values`` to run only the new
+        tokens. Positions continue after the cached tokens, so the cache length
+        must stay within ``block_size``.
+        """
+        if past_key_values is not None and not use_cache:
+            raise ValueError("past_key_values requires use_cache=True")
+        if past_key_values is None:
+            pos_offset = 0
+        else:
+            if len(past_key_values) != len(self.blocks):
+                raise ValueError(
+                    f"expected {len(self.blocks)} layer caches, "
+                    f"got {len(past_key_values)}"
+                )
+            pos_offset = past_key_values[0][0].shape[2]
+
+        x = self.embed(idx, pos_offset=pos_offset)  # (B, T, n_embd)
+        presents = []
+        for layer, block in enumerate(self.blocks):
+            if use_cache:
+                past = None if past_key_values is None else past_key_values[layer]
+                x, present = block.forward_with_cache(x, past, pos_offset)
+                presents.append(present)
+            else:
+                x = block(x)                        # N x (attention + feed-forward)
         x = self.ln_f(x)
         logits = self.lm_head(x)   # (B, T, vocab)
         loss = None if targets is None else _loss(logits, targets)
+        if use_cache:
+            return logits, loss, tuple(presents)
         return logits, loss
 
     @torch.no_grad()
@@ -104,11 +136,13 @@ class TinyGPT(nn.Module):
         top_k=None,
         top_p=None,
         repetition_penalty=1.0,
+        use_cache=False,
     ):
         """Sample tokens one at a time and return the full sequence.
 
         Call model.eval() first. See model.sampling for the meaning of the
-        sampling options.
+        sampling options. Set ``use_cache=True`` to reuse keys/values between
+        decoding steps; the output matches the uncached path.
         """
         out = idx
         for out in self.generate_stream(
@@ -118,6 +152,7 @@ class TinyGPT(nn.Module):
             top_k=top_k,
             top_p=top_p,
             repetition_penalty=repetition_penalty,
+            use_cache=use_cache,
         ):
             pass
         return out
@@ -130,15 +165,36 @@ class TinyGPT(nn.Module):
         top_k=None,
         top_p=None,
         repetition_penalty=1.0,
+        use_cache=False,
     ):
         """Yield the full sequence after each newly sampled token.
 
         Useful for streaming output: read the last token of each yield.
+
+        With a KV cache, the prompt is prefilled once and later steps forward
+        only the newest token. The learned absolute position embeddings force a
+        cache rebuild whenever the context window has to slide: the retained
+        tokens are re-run from position 0, exactly like the uncached generator.
         """
         with torch.no_grad():
+            past_key_values = None
             for _ in range(max_new_tokens):
-                idx_cond = idx[:, -self.block_size:]  # crop to the context window
-                logits, _ = self(idx_cond)
+                if use_cache:
+                    if past_key_values is None or idx.size(1) > self.block_size:
+                        # First step, or the window moved: positions restart at 0,
+                        # so recompute the retained context instead of reusing it.
+                        window = idx[:, -self.block_size:]
+                        logits, _, past_key_values = self(window, use_cache=True)
+                    else:
+                        logits, _, past_key_values = self(
+                            idx[:, -1:],
+                            past_key_values=past_key_values,
+                            use_cache=True,
+                        )
+                else:
+                    idx_cond = idx[:, -self.block_size:]  # crop to the context window
+                    logits, _ = self(idx_cond)
+
                 next_id = sample_next_token(
                     logits[:, -1, :],
                     temperature=temperature,

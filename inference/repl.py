@@ -42,6 +42,8 @@ def parse_args():
     p.add_argument("--top-p", type=float, default=None, help="nucleus cutoff (off by default)")
     p.add_argument("--repetition-penalty", type=float, default=1.0, help="1.0 = off")
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--kv-cache", action="store_true",
+                   help="reuse attention keys/values between decoding steps")
     return p.parse_args()
 
 
@@ -99,7 +101,10 @@ def main():
 
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("tiny-llm interactive generation")
-    print(f"checkpoint: {args.ckpt} | {n_params:.2f}M params | /help for commands")
+    print(
+        f"checkpoint: {args.ckpt} | {n_params:.2f}M params | "
+        f"kv_cache={'on' if args.kv_cache else 'off'} | /help for commands"
+    )
     _show_state(state)
 
     while True:
@@ -144,7 +149,9 @@ def main():
         generated = []
         print()
         try:
-            for chunk in stream_text(model, tok, candidate, **state):
+            for chunk in stream_text(
+                model, tok, candidate, use_cache=args.kv_cache, **state
+            ):
                 generated.append(chunk)
                 print(chunk, end="", flush=True)
         except KeyboardInterrupt:
