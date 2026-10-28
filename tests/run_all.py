@@ -7,6 +7,7 @@ MODULES = (
     "tests.test_training",
     "tests.test_bpe",
     "tests.test_cache",
+    "tests.test_rope",
 )
 
 

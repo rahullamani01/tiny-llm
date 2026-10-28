@@ -16,6 +16,7 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 - [x] Training
 - [x] Text generation (temperature, top-k, top-p, repetition penalty, streaming)
 - [x] Optional KV caching for generation
+- [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
 - [x] Resumable training and best-checkpoint tracking
 - [x] Evaluation (loss and perplexity)
@@ -44,6 +45,9 @@ python -m training.train --max-steps 2000 --batch-size 16 --lr 5e-4
 
 # share the token embedding and output projection
 python -m training.train --tie-weights
+
+# train with rotary position embeddings (from scratch)
+python -m training.train --pos-embedding rope --out checkpoints/tinygpt-rope.pt
 
 # disable the LR schedule or force a device
 python -m training.train --lr-schedule none --device cpu
@@ -159,6 +163,26 @@ See [docs/kv_cache.md](docs/kv_cache.md) for the forward-path diagram, tensor
 shapes, mask derivation, context-window policy, measured numbers and the
 cache-memory formula.
 
+### Position embeddings: learned vs RoPE
+
+Models use learned absolute positions by default. Add `--pos-embedding rope` to
+rotate each head's queries and keys instead, which removes the position table
+and makes attention depend on relative distance:
+
+```bash
+python -m training.train --pos-embedding rope --out checkpoints/tinygpt-rope.pt
+python -m inference.generate --ckpt checkpoints/tinygpt-rope.pt --kv-cache
+```
+
+The choice is saved in the checkpoint, so inference and evaluation pick the
+right scheme automatically. RoPE models must be trained from scratch; resuming
+with a different `--pos-embedding` is rejected, and existing learned-position
+checkpoints keep working unchanged. RoPE requires an even head size and works
+with KV caching because cached keys are stored already rotated.
+
+See [docs/rope.md](docs/rope.md) for the rotation math, relative-position
+property, cache interaction, and tests.
+
 ## Tests
 ```bash
 python -m tests.run_all
@@ -170,11 +194,11 @@ The same suite runs in GitHub Actions on every push and pull request.
 ```
 data/         training text
 tokenizer/    char + BPE tokenizers, vocabulary state
-model/        embeddings, attention, transformer, model, sampling
+model/        embeddings, attention, RoPE, transformer, model, sampling
 training/     dataset batching, schedules, evaluation, training loop
 inference/    text generation, streaming, REPL, evaluation CLI
 experiments/  attention visualization, temperature test, KV-cache benchmark
-docs/         KV-cache design notes
+docs/         KV-cache and RoPE design notes
 checkpoints/  saved weights (git-ignored)
 utils.py      device selection and seeding
 checkpoint.py checkpoint save/load

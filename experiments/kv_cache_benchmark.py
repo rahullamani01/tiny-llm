@@ -117,6 +117,7 @@ def _build_model(args, device):
         n_head=args.n_head,
         n_layer=args.n_layer,
         dropout=0.0,
+        pos_embedding=args.pos_embedding,
     ).to(device).eval()
 
 
@@ -139,6 +140,8 @@ def main():
     p.add_argument("--n-head", type=int, default=4)
     p.add_argument("--n-embd", type=int, default=128)
     p.add_argument("--vocab-size", type=int, default=65)
+    p.add_argument("--pos-embedding", choices=["learned", "rope"], default="learned",
+                   help="position scheme for the synthetic model")
     args = p.parse_args()
 
     if args.prompt_tokens < 1:
@@ -193,7 +196,7 @@ def main():
         f"Model: n_layer={len(model.blocks)} "
         f"n_head={len(model.blocks[0].sa.heads)} "
         f"n_embd={model.embed.token_embedding.embedding_dim} "
-        f"block_size={model.block_size}"
+        f"block_size={model.block_size} pos_embedding={model.pos_embedding}"
     )
     print(
         f"Prompt tokens: {args.prompt_tokens} | Generated tokens: {args.tokens} | "

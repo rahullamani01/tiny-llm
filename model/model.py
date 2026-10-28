@@ -64,12 +64,27 @@ class TinyGPT(nn.Module):
     """Embeddings -> N transformer blocks -> LayerNorm -> output head."""
 
     def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout=0.0,
-                 tie_weights=False):
+                 tie_weights=False, pos_embedding="learned", rope_base=10_000.0):
         super().__init__()
+        if pos_embedding not in ("learned", "rope"):
+            raise ValueError(f"unknown pos_embedding {pos_embedding!r}")
         self.block_size = block_size
-        self.embed = Embeddings(vocab_size, block_size, n_embd)
+        self.pos_embedding = pos_embedding
+        self.embed = Embeddings(
+            vocab_size, block_size, n_embd, pos_embedding=pos_embedding
+        )
         self.blocks = nn.Sequential(
-            *[Block(n_embd, n_head, block_size, dropout) for _ in range(n_layer)]
+            *[
+                Block(
+                    n_embd,
+                    n_head,
+                    block_size,
+                    dropout,
+                    pos_embedding=pos_embedding,
+                    rope_base=rope_base,
+                )
+                for _ in range(n_layer)
+            ]
         )
         self.ln_f = nn.LayerNorm(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)

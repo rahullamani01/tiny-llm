@@ -13,6 +13,7 @@ unchanged.
 ```
 idx [B, T]
   -> Embeddings: token table + learned absolute positions pos_offset..pos_offset+T-1
+                  (RoPE mode adds no positions; attention rotates q/k instead)
   -> Block x N
        ln1 -> MultiHeadAttention (H heads, each with its own q/k/v = head_size)
            -> concat heads -> proj -> + residual
@@ -102,8 +103,10 @@ Consequences:
 - Past the window the rebuild costs the same as the uncached recompute, so the
   speedup only applies while `prompt + generated - 1 <= block_size`.
 
-A future RoPE implementation can avoid the rebuild, because rotating cached
-keys makes the positions relative.
+A future rolling-cache implementation can avoid the rebuild in RoPE mode,
+because rotating cached keys makes their positions relative. RoPE itself is
+already supported with `--pos-embedding rope` (see `docs/rope.md`); it still
+uses the rebuild policy here so cached and uncached output stay identical.
 
 ## Enabling it
 
@@ -125,7 +128,7 @@ text = generate_text(model, tok, "ROMEO:\n", use_cache=True)
 ```
 
 Keep the model in `eval()` mode; dropout during cached decoding would not match
-the uncached computation.
+the uncached computation. RoPE models use the same switch and cache layout.
 
 ## Verifying correctness
 

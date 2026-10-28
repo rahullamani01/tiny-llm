@@ -2,11 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from model.rope import RotaryEmbedding
+
 
 class Head(nn.Module):
     """One head of causal self-attention."""
 
-    def __init__(self, n_embd, head_size, block_size, dropout=0.0):
+    def __init__(self, n_embd, head_size, block_size, dropout=0.0,
+                 pos_embedding="learned", rope_base=10_000.0):
         super().__init__()
         self.key = nn.Linear(n_embd, head_size, bias=False)    # "what do I contain?"
         self.query = nn.Linear(n_embd, head_size, bias=False)  # "what am I looking for?"
@@ -14,6 +17,11 @@ class Head(nn.Module):
         # lower-triangular matrix: position t may only look at positions <= t
         self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
         self.dropout = nn.Dropout(dropout)
+        self.rope = (
+            RotaryEmbedding(head_size, block_size, rope_base)
+            if pos_embedding == "rope"
+            else None
+        )
         self.last_attn = None  # saved for attention_visualization.py
 
     def forward(self, x):
@@ -39,6 +47,12 @@ class Head(nn.Module):
         q = self.query(x)                                             # (B, T, hs)
         k = self.key(x)                                               # (B, T, hs)
         v = self.value(x)                                             # (B, T, hs)
+
+        if self.rope is not None:
+            # Rotate q and k at their absolute positions. Cached keys were
+            # already rotated when they were first computed.
+            q = self.rope(q, pos_offset)
+            k = self.rope(k, pos_offset)
 
         if past_kv is not None:
             past_k, past_v = past_kv
@@ -85,12 +99,23 @@ class Head(nn.Module):
 class MultiHeadAttention(nn.Module):
     """Several heads in parallel, each in its own smaller subspace."""
 
-    def __init__(self, n_embd, n_head, block_size, dropout=0.0):
+    def __init__(self, n_embd, n_head, block_size, dropout=0.0,
+                 pos_embedding="learned", rope_base=10_000.0):
         super().__init__()
         assert n_embd % n_head == 0, "n_embd must be divisible by n_head"
         head_size = n_embd // n_head
         self.heads = nn.ModuleList(
-            [Head(n_embd, head_size, block_size, dropout) for _ in range(n_head)]
+            [
+                Head(
+                    n_embd,
+                    head_size,
+                    block_size,
+                    dropout,
+                    pos_embedding=pos_embedding,
+                    rope_base=rope_base,
+                )
+                for _ in range(n_head)
+            ]
         )
         self.proj = nn.Linear(n_embd, n_embd)  # mix the heads' outputs together
         self.dropout = nn.Dropout(dropout)

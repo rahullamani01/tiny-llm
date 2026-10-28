@@ -47,6 +47,8 @@ def parse_args():
                    help="BPE vocabulary JSON (default: next to --out)")
     p.add_argument("--resume", action="store_true", help="continue from --out")
     p.add_argument("--tie-weights", action="store_true", help="share token embedding and output weights")
+    p.add_argument("--pos-embedding", choices=["learned", "rope"], default="learned",
+                   help="learned absolute positions, or rotary embeddings (train from scratch)")
     p.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     p.add_argument("--seed", type=int, default=CFG["seed"])
     p.add_argument("--batch-size", type=int, default=CFG["batch_size"])
@@ -113,6 +115,12 @@ def _checkpoint_matches(ckpt_cfg, model_cfg):
         raise SystemExit(
             "error: checkpoint tie_weights does not match; pass --tie-weights if the "
             "checkpoint was trained with it"
+        )
+    if ckpt_cfg.get("pos_embedding", "learned") != model_cfg["pos_embedding"]:
+        raise SystemExit(
+            f"error: checkpoint pos_embedding={ckpt_cfg.get('pos_embedding', 'learned')!r} "
+            f"does not match current pos_embedding={model_cfg['pos_embedding']!r}; "
+            "pass --pos-embedding or start a new run"
         )
 
 
@@ -187,6 +195,7 @@ def main():
         f"tokenizer: {args.tokenizer} | vocab {tok.vocab_size} | "
         f"chars {len(tok.chars)}"
     )
+    print(f"positions: {args.pos_embedding}")
     data = torch.tensor(tok.encode(text), dtype=torch.long)
     try:
         splits = split_data(data, cfg["val_fraction"])
@@ -208,6 +217,7 @@ def main():
         n_layer=cfg["n_layer"],
         dropout=cfg["dropout"],
         tie_weights=args.tie_weights,
+        pos_embedding=args.pos_embedding,
     )
     model = TinyGPT(**model_cfg).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"])
@@ -262,6 +272,7 @@ def main():
         data=args.data,
         device=str(device),
         tie_weights=args.tie_weights,
+        pos_embedding=args.pos_embedding,
         tokenizer=args.tokenizer,
         vocab_file=vocab_path,
         vocab_size=tok.vocab_size,
