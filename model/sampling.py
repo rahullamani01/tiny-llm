@@ -28,18 +28,26 @@ def apply_repetition_penalty(logits, generated, penalty):
     """Divide positive logits of seen tokens by `penalty`, multiply negative ones.
 
     This is the CTRL-style penalty: a penalty > 1 makes already generated tokens
-    less likely, while leaving unseen tokens untouched.
+    less likely, while leaving unseen tokens untouched. The whole batch is
+    handled at once with a boolean mask, so cost does not grow with batch size.
     """
     if penalty == 1.0 or generated is None or generated.numel() == 0:
         return logits
 
-    logits = logits.clone()
-    for row in range(logits.size(0)):
-        seen = torch.unique(generated[row])
-        scores = logits[row, seen]
-        scores = torch.where(scores > 0, scores / penalty, scores * penalty)
-        logits[row, seen] = scores
-    return logits
+    if generated.dim() != 2:
+        raise ValueError("generated must be 2-D (batch, tokens)")
+    if generated.size(0) != logits.size(0):
+        raise ValueError(
+            f"generated batch size {generated.size(0)} does not match "
+            f"logits batch size {logits.size(0)}"
+        )
+    if generated.min() < 0 or generated.max() >= logits.size(-1):
+        raise ValueError("generated contains token ids outside the vocabulary")
+
+    seen = torch.zeros_like(logits, dtype=torch.bool)
+    seen.scatter_(1, generated, True)
+    penalized = torch.where(logits > 0, logits / penalty, logits * penalty)
+    return torch.where(seen, penalized, logits)
 
 
 def apply_top_k(logits, k):

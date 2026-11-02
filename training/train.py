@@ -24,7 +24,9 @@ CFG = dict(
     min_lr=1e-4,        # cosine decay floor
     warmup_steps=100,   # linear warmup
     lr_schedule="cosine",
+    weight_decay=0.01,  # AdamW decoupled weight decay
     grad_clip=1.0,
+    grad_accum_steps=1,  # micro-batches per optimizer step
     max_steps=5000,
     eval_interval=500,
     eval_iters=50,
@@ -61,7 +63,11 @@ def parse_args():
     p.add_argument("--min-lr", type=float, default=CFG["min_lr"])
     p.add_argument("--warmup-steps", type=int, default=CFG["warmup_steps"])
     p.add_argument("--lr-schedule", choices=["cosine", "none"], default=CFG["lr_schedule"])
+    p.add_argument("--weight-decay", type=float, default=CFG["weight_decay"],
+                   help="AdamW decoupled weight decay (0 disables it)")
     p.add_argument("--grad-clip", type=float, default=CFG["grad_clip"], help="0 disables clipping")
+    p.add_argument("--grad-accum-steps", type=int, default=CFG["grad_accum_steps"],
+                   help="micro-batches accumulated per optimizer step")
     p.add_argument("--max-steps", type=int, default=CFG["max_steps"])
     p.add_argument("--eval-interval", type=int, default=CFG["eval_interval"])
     p.add_argument("--eval-iters", type=int, default=CFG["eval_iters"])
@@ -90,8 +96,12 @@ def validate_config(cfg):
         raise ValueError("require 0 <= min_lr <= lr")
     if cfg["warmup_steps"] < 0 or cfg["warmup_steps"] > cfg["max_steps"]:
         raise ValueError("require 0 <= warmup_steps <= max_steps")
+    if cfg["weight_decay"] < 0:
+        raise ValueError("weight_decay must be >= 0")
     if cfg["grad_clip"] < 0:
         raise ValueError("grad_clip must be >= 0")
+    if cfg["grad_accum_steps"] < 1:
+        raise ValueError("grad_accum_steps must be >= 1")
     if cfg["eval_interval"] < 1 or cfg["eval_iters"] < 1:
         raise ValueError("eval_interval and eval_iters must be >= 1")
     if not 0.0 < cfg["val_fraction"] < 1.0:
@@ -122,6 +132,34 @@ def _checkpoint_matches(ckpt_cfg, model_cfg):
             f"does not match current pos_embedding={model_cfg['pos_embedding']!r}; "
             "pass --pos-embedding or start a new run"
         )
+
+
+def run_optimizer_step(model, optimizer, batches, grad_clip=0.0):
+    """Accumulate gradients over micro-batches, then update the model once.
+
+    Each loss is divided by the number of batches, so the summed gradient equals
+    the gradient of the mean loss over the concatenated batch. That makes
+    gradient accumulation mathematically equivalent to a single larger batch
+    (ignoring batch-norm-like layers, which this model does not use).
+
+    Returns:
+        The average loss across the micro-batches, as a Python float.
+    """
+    batches = list(batches)
+    if not batches:
+        raise ValueError("at least one micro-batch is required")
+
+    optimizer.zero_grad(set_to_none=True)
+    total = 0.0
+    for xb, yb in batches:
+        _, loss = model(xb, yb)
+        (loss / len(batches)).backward()
+        total += loss.item()
+
+    if grad_clip > 0:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+    optimizer.step()
+    return total / len(batches)
 
 
 def build_tokenizer(args, text):
@@ -220,8 +258,16 @@ def main():
         pos_embedding=args.pos_embedding,
     )
     model = TinyGPT(**model_cfg).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"])
+    opt = torch.optim.AdamW(
+        model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"]
+    )
+    effective_batch = cfg["batch_size"] * cfg["grad_accum_steps"]
+    tokens_per_step = effective_batch * cfg["block_size"]
     print(f"parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+    print(
+        f"batch: {cfg['batch_size']} x {cfg['grad_accum_steps']} accum = "
+        f"{effective_batch} sequences ({tokens_per_step} tokens) per step"
+    )
     print(
         f"tokens: {len(data)} | train {len(splits['train'])} | "
         f"val {len(splits['val'])}"
@@ -363,15 +409,11 @@ def main():
         for group in opt.param_groups:
             group["lr"] = lr
 
-        xb, yb = get_batch(
-            splits["train"], cfg["block_size"], cfg["batch_size"], device
-        )
-        _, loss = model(xb, yb)
-        opt.zero_grad(set_to_none=True)
-        loss.backward()
-        if cfg["grad_clip"] > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["grad_clip"])
-        opt.step()
+        batches = [
+            get_batch(splits["train"], cfg["block_size"], cfg["batch_size"], device)
+            for _ in range(cfg["grad_accum_steps"])
+        ]
+        run_optimizer_step(model, opt, batches, cfg["grad_clip"])
 
     evaluate_and_log(cfg["max_steps"])
 

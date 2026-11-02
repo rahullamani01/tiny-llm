@@ -190,6 +190,9 @@ class TinyGPT(nn.Module):
         only the newest token. The learned absolute position embeddings force a
         cache rebuild whenever the context window has to slide: the retained
         tokens are re-run from position 0, exactly like the uncached generator.
+
+        The repetition penalty only looks at the last ``block_size`` tokens,
+        matching the context the model can attend to.
         """
         with torch.no_grad():
             past_key_values = None
@@ -210,13 +213,17 @@ class TinyGPT(nn.Module):
                     idx_cond = idx[:, -self.block_size:]  # crop to the context window
                     logits, _ = self(idx_cond)
 
+                # Penalize repeats only inside the active context window, which
+                # is the text the model can actually attend to. Without this,
+                # long generations would penalize tokens that already scrolled
+                # out of view.
                 next_id = sample_next_token(
                     logits[:, -1, :],
                     temperature=temperature,
                     top_k=top_k,
                     top_p=top_p,
                     repetition_penalty=repetition_penalty,
-                    generated=idx,
+                    generated=idx[:, -self.block_size:],
                 )
                 idx = torch.cat([idx, next_id], dim=1)
                 yield idx

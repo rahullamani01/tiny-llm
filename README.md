@@ -2,7 +2,36 @@
 
 [![tests](https://github.com/rahullamani01/tiny-llm/actions/workflows/tests.yml/badge.svg)](https://github.com/rahullamani01/tiny-llm/actions/workflows/tests.yml)
 
-A tiny GPT built from scratch in PyTorch to learn how LLMs work.
+A tiny GPT built from scratch in PyTorch to learn how LLMs work: tokenizer,
+embeddings, causal self-attention, transformer blocks, training, and sampling —
+all in readable modules with tests.
+
+## Results
+
+Reference run: char tokenizer, 4 layers, 128-dim, 4 heads, context 64, 5000
+steps on the 1.1 MB tiny-Shakespeare corpus (CPU/MPS friendly, ~0.82M params).
+
+| train loss | val loss | val perplexity | parameters |
+|---|---|---|---|
+| 1.41 | 1.60 | 4.96 | 816,705 |
+
+![training loss curve](assets/loss_curve.png)
+
+Sample (temperature 0.8, top-k 40, seed 0):
+
+```text
+ROMEO:
+Well, shall me in so any pity in cussion.
+
+SICINIUS:
+Ha!
+
+YORK:
+...
+```
+
+The point is the implementation, not the sample quality: every component is
+small enough to read end to end and is covered by the test suite.
 
 ## Roadmap
 - [x] Character tokenizer
@@ -18,6 +47,7 @@ A tiny GPT built from scratch in PyTorch to learn how LLMs work.
 - [x] Optional KV caching for generation
 - [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
+- [x] Gradient accumulation and AdamW weight decay
 - [x] Resumable training and best-checkpoint tracking
 - [x] Evaluation (loss and perplexity)
 - [x] Optional weight tying
@@ -52,9 +82,20 @@ python -m training.train --pos-embedding rope --out checkpoints/tinygpt-rope.pt
 # disable the LR schedule or force a device
 python -m training.train --lr-schedule none --device cpu
 
+# simulate a larger batch on a small GPU (8 x 4 = 32 sequences per update)
+python -m training.train --batch-size 8 --grad-accum-steps 4
+
+# change AdamW weight decay (default 0.01; 0 disables it)
+python -m training.train --weight-decay 0.05
+
 # extend a finished run
 python -m training.train --resume --max-steps 8000
 ```
+
+`--grad-accum-steps` averages gradients over several micro-batches before one
+optimizer update, so the effective batch is `batch-size * grad-accum-steps`.
+The math is equivalent to one larger batch and the memory cost stays that of a
+single micro-batch.
 
 Checkpoints are written next to `--out` (default `checkpoints/tinygpt.pt`):
 - `tinygpt.pt` — latest model plus optimizer/step/history, used by `--resume`

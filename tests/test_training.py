@@ -10,6 +10,7 @@ from model.model import TinyGPT
 from training.dataset import get_batch, split_data
 from training.evaluate import evaluate_loss
 from training.schedule import cosine_lr, get_lr
+from training.train import CFG, run_optimizer_step, validate_config
 from utils import get_device, set_seed
 
 MODEL_CFG = dict(
@@ -105,6 +106,46 @@ def test_evaluate_loss():
         pass
     else:
         raise AssertionError("expected ValueError for short evaluation data")
+
+
+def test_gradient_accumulation_matches_large_batch():
+    torch.manual_seed(0)
+    model_a = _model()
+    model_b = _model()  # same initialization
+    opt_a = torch.optim.AdamW(model_a.parameters(), lr=1e-3)
+    opt_b = torch.optim.AdamW(model_b.parameters(), lr=1e-3)
+
+    x1 = torch.randint(0, MODEL_CFG["vocab_size"], (3, MODEL_CFG["block_size"]))
+    y1 = torch.randint(0, MODEL_CFG["vocab_size"], (3, MODEL_CFG["block_size"]))
+    x2 = torch.randint(0, MODEL_CFG["vocab_size"], (3, MODEL_CFG["block_size"]))
+    y2 = torch.randint(0, MODEL_CFG["vocab_size"], (3, MODEL_CFG["block_size"]))
+
+    loss_accum = run_optimizer_step(model_a, opt_a, [(x1, y1), (x2, y2)])
+    loss_big = run_optimizer_step(
+        model_b, opt_b, [(torch.cat([x1, x2]), torch.cat([y1, y2]))]
+    )
+
+    assert math.isclose(loss_accum, loss_big, rel_tol=1e-5, abs_tol=1e-6)
+    for p_a, p_b in zip(model_a.parameters(), model_b.parameters()):
+        assert torch.allclose(p_a, p_b, atol=1e-6, rtol=1e-5)
+
+    try:
+        run_optimizer_step(model_a, opt_a, [])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for an empty micro-batch list")
+
+
+def test_validate_config_rejects_bad_batch_options():
+    validate_config(dict(CFG))
+    for override in ({"grad_accum_steps": 0}, {"weight_decay": -0.1}):
+        try:
+            validate_config(dict(CFG, **override))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for {override}")
 
 
 def test_checkpoint_roundtrip():

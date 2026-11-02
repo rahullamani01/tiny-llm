@@ -74,7 +74,9 @@ logits, _, past = model(next_id, past_key_values=past, use_cache=True)
 `TinyGPT.forward` returns `(logits, loss)` as before; with `use_cache=True` it
 returns `(logits, loss, past_key_values)`. `model.generate(...)` and
 `model.generate_stream(...)` accept `use_cache=True` and preserve all sampling
-options (temperature, top-k, top-p, repetition penalty, streaming).
+options (temperature, top-k, top-p, repetition penalty, streaming). The
+repetition penalty only considers the last `block_size` tokens, which matches
+the active context window in both the cached and uncached paths.
 
 ## Context-window policy
 
