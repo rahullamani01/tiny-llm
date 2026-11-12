@@ -106,6 +106,35 @@ The CLI:
 The model must be an SFT checkpoint. Loading a Base completion checkpoint gives
 a clear error instead of silently producing role tokens.
 
+## Web demo
+
+```bash
+pip install fastapi uvicorn
+python -m server.app --ckpt checkpoints/tinygpt-chat.pt --port 8000
+```
+
+- `server/chat.py` validates request parameters, builds the chat prompt and
+  yields streaming events. It has no FastAPI import, so it is tested directly.
+- `server/app.py` exposes `POST /api/chat` (SSE), `GET /api/health`, serves the
+  static UI at `/`, and serializes generation with a lock because the model is
+  shared.
+- `web/` is a dependency-free single-page client with multi-turn history, a
+  stop/abort button, and a settings drawer for the system prompt, temperature,
+  top-k, max tokens and KV caching.
+
+The stream looks like:
+
+```text
+data: {"token": "Hel"}
+
+data: {"token": "lo"}
+
+data: {"done": true, "content": "Hello"}
+```
+
+Errors inside a stream are sent as `data: {"error": "..."}` so the client always
+gets a well-formed response.
+
 ## Tests
 
 ```bash

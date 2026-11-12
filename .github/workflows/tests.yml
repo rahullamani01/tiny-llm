@@ -27,5 +27,8 @@ jobs:
       - name: Install PyTorch (CPU)
         run: pip install torch --index-url https://download.pytorch.org/whl/cpu
 
+      - name: Install server test dependencies
+        run: pip install fastapi uvicorn httpx
+
       - name: Run tests
         run: python -m tests.run_all

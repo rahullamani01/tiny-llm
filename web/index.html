@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tiny-llm chat</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">t</div>
+        <div>
+          <h1>tiny-llm chat</h1>
+          <p><span class="dot offline" id="dot"></span><span id="status">connecting…</span></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn new" id="new-chat" type="button">New chat</button>
+        <button class="btn icon" id="settings-toggle" type="button" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="messages" id="messages" aria-live="polite">
+      <section class="welcome" id="welcome">
+        <div class="logo">t</div>
+        <h2>Talk to a GPT built from scratch.</h2>
+        <p>
+          This is a tiny transformer trained in PyTorch. It is honest about its
+          size: a small SFT run is a demo, not ChatGPT. Train it on more data to
+          make it smarter.
+        </p>
+        <div class="suggestions">
+          <button class="suggestion" data-prompt="What is a transformer?" type="button">What is a transformer?</button>
+          <button class="suggestion" data-prompt="Explain attention like I am five." type="button">Explain attention simply</button>
+          <button class="suggestion" data-prompt="Tell me a short story about a robot." type="button">A short robot story</button>
+          <button class="suggestion" data-prompt="Give me a tip for learning to code." type="button">A coding tip</button>
+        </div>
+      </section>
+    </main>
+
+    <form class="composer" id="composer">
+      <textarea id="input" rows="1" placeholder="Message tiny-llm…" autocomplete="off"></textarea>
+      <button class="stop" id="stop" type="button" hidden>Stop</button>
+      <button class="send" id="send" type="submit">Send</button>
+    </form>
+    <p class="hint">Enter to send · Shift+Enter for a new line</p>
+  </div>
+
+  <div class="backdrop" id="backdrop"></div>
+  <aside class="settings" id="settings" aria-label="Settings">
+    <h3>Settings</h3>
+    <p class="sub">Changes apply to the next message.</p>
+
+    <div class="field">
+      <label>System prompt</label>
+      <textarea id="system"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Temperature <span id="temperature-value">0.8</span></label>
+      <input id="temperature" type="range" min="0" max="1.6" step="0.05" value="0.8">
+    </div>
+
+    <div class="field">
+      <label>Top-k <span id="top-k-value">40</span></label>
+      <input id="top-k" type="range" min="0" max="100" step="1" value="40">
+    </div>
+
+    <div class="field">
+      <label>Max new tokens</label>
+      <div class="row">
+        <input id="max-tokens" type="number" min="1" max="2048" step="1" value="256">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="switch">
+        <input id="kv-cache" type="checkbox" checked>
+        Use KV cache
+      </label>
+    </div>
+
+    <button class="btn" id="close-settings" type="button">Close</button>
+  </aside>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

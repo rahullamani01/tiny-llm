@@ -45,6 +45,7 @@ small enough to read end to end and is covered by the test suite.
 - [x] Training
 - [x] Text generation (temperature, top-k, top-p, repetition penalty, streaming)
 - [x] Chat SFT: special tokens, masked loss, JSONL data and streaming chat CLI
+- [x] Web chat demo: FastAPI SSE streaming API and a browser UI
 - [x] Optional KV caching for generation
 - [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
@@ -176,6 +177,35 @@ instruction dataset such as TinyStories-Instruct plus a small PersonaChat/Dolly
 subset. See [docs/chat.md](docs/chat.md) for the full workflow, dataset and
 scaling notes.
 
+## Web demo
+
+The same SFT checkpoint can be served over HTTP with a small browser UI:
+
+```bash
+pip install fastapi uvicorn
+python -m server.app --ckpt checkpoints/tinygpt-chat.pt
+# open http://127.0.0.1:8000
+```
+
+What it does:
+
+- `POST /api/chat` streams tokens as Server-Sent Events (`data: {"token": ...}`)
+  and ends with `data: {"done": true, "content": "..."}`.
+- `GET /api/health` reports parameter count, context size and vocabulary.
+- The UI has multi-turn history, a stop button, a settings drawer (system
+  prompt, temperature, top-k, max tokens, KV cache) and saves settings locally.
+- Generation is serialized with a lock because there is one shared model
+  instance.
+- `server/chat.py` holds the validation and streaming core without importing
+  FastAPI, so it is testable on its own.
+
+Flags: `--host`, `--port`, `--system`, `--device`, `--no-kv-cache`.
+
+Honest note: the UI is polished, but the model behind it is still the 10-file
+toy SFT run unless you train on real instruction data. The demo shows the full
+serving path — prompt rendering, SSE streaming, stop/abort, sampling controls —
+not a ChatGPT-quality assistant.
+
 ## Evaluate
 ```bash
 python -m inference.evaluate
@@ -285,6 +315,8 @@ tokenizer/    char + BPE tokenizers, special tokens, vocabulary state
 model/        embeddings, attention, RoPE, transformer, model, sampling
 training/     dataset batching, schedules, evaluation, training + SFT loops
 inference/    text generation, streaming, chat CLI, REPL, evaluation
+server/       FastAPI chat app and streaming event core
+web/          static chat UI (HTML, CSS, JS)
 experiments/  attention visualization, temperature test, KV-cache benchmark
 docs/         KV-cache, RoPE and chat/SFT design notes
 checkpoints/  saved weights (git-ignored)
