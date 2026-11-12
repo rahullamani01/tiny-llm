@@ -30,6 +30,7 @@ CFG = dict(
     max_steps=5000,
     eval_interval=500,
     eval_iters=50,
+    patience=0,         # stop after N evals without val improvement (0 = off)
     val_fraction=0.1,
     seed=1337,
 )
@@ -71,6 +72,8 @@ def parse_args():
     p.add_argument("--max-steps", type=int, default=CFG["max_steps"])
     p.add_argument("--eval-interval", type=int, default=CFG["eval_interval"])
     p.add_argument("--eval-iters", type=int, default=CFG["eval_iters"])
+    p.add_argument("--patience", type=int, default=CFG["patience"],
+                   help="stop after N evals without val improvement (0 = off)")
     p.add_argument("--val-fraction", type=float, default=CFG["val_fraction"])
     p.add_argument("--sample-tokens", type=int, default=500, help="0 skips the final sample")
     p.add_argument("--no-plot", action="store_true")
@@ -104,6 +107,8 @@ def validate_config(cfg):
         raise ValueError("grad_accum_steps must be >= 1")
     if cfg["eval_interval"] < 1 or cfg["eval_iters"] < 1:
         raise ValueError("eval_interval and eval_iters must be >= 1")
+    if cfg["patience"] < 0:
+        raise ValueError("patience must be >= 0 (0 disables early stopping)")
     if not 0.0 < cfg["val_fraction"] < 1.0:
         raise ValueError("val_fraction must be in (0, 1)")
     if cfg["lr_schedule"] not in ("cosine", "none"):
@@ -365,8 +370,11 @@ def main():
         with open(history_path, "w") as f:
             json.dump(history, f, indent=2)
 
+    stale_evals = 0
+    stop_training = False
+
     def evaluate_and_log(step):
-        nonlocal best_val
+        nonlocal best_val, stale_evals, stop_training
         metrics = estimate_loss()
         entry = (step, metrics["train"], metrics["val"])
         if history and history[-1][0] == step:
@@ -377,6 +385,9 @@ def main():
         improved = metrics["val"] < best_val
         if improved:
             best_val = metrics["val"]
+            stale_evals = 0
+        else:
+            stale_evals += 1
         print(
             f"step {step}: train {metrics['train']:.4f}, "
             f"val {metrics['val']:.4f}, lr {current_lr(step):.2e}, "
@@ -397,6 +408,12 @@ def main():
                 tokenizer=tok_state,
             )
             print(f"  new best -> {best_path}")
+        if cfg["patience"] > 0 and stale_evals >= cfg["patience"]:
+            stop_training = True
+            print(
+                f"early stopping: validation has not improved for "
+                f"{stale_evals} evaluations"
+            )
         return metrics
 
     # ---- training loop ----
@@ -404,6 +421,8 @@ def main():
     for step in range(start_step, cfg["max_steps"]):
         if step % cfg["eval_interval"] == 0:
             evaluate_and_log(step)
+            if stop_training:
+                break
 
         lr = current_lr(step)
         for group in opt.param_groups:
@@ -415,7 +434,10 @@ def main():
         ]
         run_optimizer_step(model, opt, batches, cfg["grad_clip"])
 
-    evaluate_and_log(cfg["max_steps"])
+    if not stop_training:
+        evaluate_and_log(cfg["max_steps"])
+    else:
+        print(f"stopped early at step {history[-1][0]}")
 
     # ---- loss curve ----
     if not args.no_plot:

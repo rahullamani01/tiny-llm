@@ -139,7 +139,11 @@ def test_gradient_accumulation_matches_large_batch():
 
 def test_validate_config_rejects_bad_batch_options():
     validate_config(dict(CFG))
-    for override in ({"grad_accum_steps": 0}, {"weight_decay": -0.1}):
+    for override in (
+        {"grad_accum_steps": 0},
+        {"weight_decay": -0.1},
+        {"patience": -1},
+    ):
         try:
             validate_config(dict(CFG, **override))
         except ValueError:

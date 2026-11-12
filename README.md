@@ -48,7 +48,7 @@ small enough to read end to end and is covered by the test suite.
 - [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
 - [x] Gradient accumulation and AdamW weight decay
-- [x] Resumable training and best-checkpoint tracking
+- [x] Resumable training, best-checkpoint tracking and early stopping
 - [x] Evaluation (loss and perplexity)
 - [x] Optional weight tying
 - [x] Continuous integration
@@ -87,6 +87,9 @@ python -m training.train --batch-size 8 --grad-accum-steps 4
 
 # change AdamW weight decay (default 0.01; 0 disables it)
 python -m training.train --weight-decay 0.05
+
+# stop after 3 evaluations without validation improvement
+python -m training.train --patience 3
 
 # extend a finished run
 python -m training.train --resume --max-steps 8000
