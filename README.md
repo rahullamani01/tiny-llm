@@ -44,6 +44,7 @@ small enough to read end to end and is covered by the test suite.
 - [x] Stacked blocks -> Tiny GPT
 - [x] Training
 - [x] Text generation (temperature, top-k, top-p, repetition penalty, streaming)
+- [x] Chat SFT: special tokens, masked loss, JSONL data and streaming chat CLI
 - [x] Optional KV caching for generation
 - [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
@@ -132,6 +133,48 @@ Resuming requires the same data/vocabulary and architecture; pass `--tie-weights
 again if the original run used it, and pass the same `--tokenizer`/`--vocab-file`
 for BPE runs. The LR schedule is recalculated from `--max-steps`, so extending a
 run starts a fresh decay from the current step.
+
+## Chat (SFT)
+
+Fine-tune a model on JSONL conversations and talk to it in the terminal:
+
+```bash
+# train from scratch on the tiny example data (pipeline smoke test)
+python -m training.sft --data data/chat_example.jsonl \
+    --tokenizer bpe --vocab-size 512 --out checkpoints/tinygpt-chat.pt
+
+# or start from an existing Base checkpoint; pass the Base architecture, and
+# chat special tokens plus resized embedding/output rows are added automatically
+python -m training.sft --data data/chat_example.jsonl \
+    --init-from checkpoints/tinygpt-bpe.pt \
+    --block-size 64 --n-embd 128 --n-head 4 --n-layer 4 \
+    --out checkpoints/tinygpt-chat.pt
+
+python -m inference.chat --ckpt checkpoints/tinygpt-chat.pt
+```
+
+Each JSONL line is one conversation:
+
+```json
+{"system": "You are a helpful assistant.",
+ "messages": [{"role": "user", "content": "Hi"},
+              {"role": "assistant", "content": "Hello! How can I help?"}]}
+```
+
+The template is `<|system|>…<|end|>`, `<|user|>…<|end|>`,
+`<|assistant|>…<|end|>`. During SFT every token is an input, but only assistant
+content and the closing `<|end|>` token are trained; system/user text is masked
+with `-100`. The chat CLI keeps multi-turn history, trims old turns to the
+context window, streams replies, and supports `/system`, `/reset`, `/temp`,
+`/topk`, `/topp`, `/penalty`, and `/tokens`.
+
+`data/chat_example.jsonl` only has 10 conversations, so it proves the plumbing
+rather than producing a useful assistant. If a split is shorter than
+`--block-size`, SFT automatically uses smaller windows for batching. For a model that can actually chat,
+scale to 10–30M parameters, use a 256–512 token context, and train on a real
+instruction dataset such as TinyStories-Instruct plus a small PersonaChat/Dolly
+subset. See [docs/chat.md](docs/chat.md) for the full workflow, dataset and
+scaling notes.
 
 ## Evaluate
 ```bash
@@ -236,13 +279,14 @@ The same suite runs in GitHub Actions on every push and pull request.
 
 ## Project layout
 ```
-data/         training text
-tokenizer/    char + BPE tokenizers, vocabulary state
+data/         training text and chat JSONL examples
+chat/         chat template, special tokens, SFT label construction
+tokenizer/    char + BPE tokenizers, special tokens, vocabulary state
 model/        embeddings, attention, RoPE, transformer, model, sampling
-training/     dataset batching, schedules, evaluation, training loop
-inference/    text generation, streaming, REPL, evaluation CLI
+training/     dataset batching, schedules, evaluation, training + SFT loops
+inference/    text generation, streaming, chat CLI, REPL, evaluation
 experiments/  attention visualization, temperature test, KV-cache benchmark
-docs/         KV-cache and RoPE design notes
+docs/         KV-cache, RoPE and chat/SFT design notes
 checkpoints/  saved weights (git-ignored)
 utils.py      device selection and seeding
 checkpoint.py checkpoint save/load

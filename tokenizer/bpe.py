@@ -7,11 +7,14 @@ fragments become single tokens.
 import heapq
 from collections import Counter
 
+from tokenizer.tokenizer import _normalize_special_tokens
+
 
 class BPETokenizer:
-    def __init__(self, chars, merges):
+    def __init__(self, chars, merges, special_tokens=()):
         self.chars = list(chars)
         self.merges = [tuple(pair) for pair in merges]
+        self.special_tokens = _normalize_special_tokens(special_tokens)
 
         # Expand every token id back into the text it represents.
         self.token_str = list(self.chars)
@@ -20,13 +23,28 @@ class BPETokenizer:
                 raise ValueError(f"merge {rank} references an unknown token")
             self.token_str.append(self.token_str[a] + self.token_str[b])
 
+        overlap = set(self.token_str) & set(self.special_tokens)
+        if overlap:
+            shown = ", ".join(repr(t) for t in sorted(overlap))
+            raise ValueError(f"special tokens overlap with BPE tokens: {shown}")
+
         self.stoi = {c: i for i, c in enumerate(self.chars)}
         self.itos = {i: s for i, s in enumerate(self.token_str)}
-        self.vocab_size = len(self.token_str)
+        for token in self.special_tokens:  # specials sit after chars + merges
+            self.itos[len(self.itos)] = token
+        self.vocab_size = len(self.itos)
         self.merge_rank = {
             pair: (rank, len(self.chars) + rank)
             for rank, pair in enumerate(self.merges)
         }
+
+    def special_id(self, token: str) -> int:
+        if token not in self.special_tokens:
+            raise KeyError(f"unknown special token {token!r}")
+        return self.vocab_size - len(self.special_tokens) + self.special_tokens.index(token)
+
+    def is_special_id(self, token_id: int) -> bool:
+        return token_id >= self.vocab_size - len(self.special_tokens)
 
     @classmethod
     def train(cls, text, vocab_size, max_chars=100_000, min_frequency=2):
@@ -152,8 +170,13 @@ class BPETokenizer:
             "type": "bpe",
             "chars": list(self.chars),
             "merges": [list(pair) for pair in self.merges],
+            "special_tokens": list(self.special_tokens),
         }
 
     @classmethod
     def from_dict(cls, state):
-        return cls(state["chars"], state["merges"])
+        return cls(
+            state["chars"],
+            state["merges"],
+            state.get("special_tokens", ()),
+        )
