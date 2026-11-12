@@ -1,6 +1,7 @@
 # tiny-llm
 
 [![tests](https://github.com/rahullamani01/tiny-llm/actions/workflows/tests.yml/badge.svg)](https://github.com/rahullamani01/tiny-llm/actions/workflows/tests.yml)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rahullamani01/tiny-llm/blob/main/notebooks/train_chat_colab.ipynb)
 
 A tiny GPT built from scratch in PyTorch to learn how LLMs work: tokenizer,
 embeddings, causal self-attention, transformer blocks, training, and sampling —
@@ -46,6 +47,7 @@ small enough to read end to end and is covered by the test suite.
 - [x] Text generation (temperature, top-k, top-p, repetition penalty, streaming)
 - [x] Chat SFT: special tokens, masked loss, JSONL data and streaming chat CLI
 - [x] Web chat demo: FastAPI SSE streaming API and a browser UI
+- [x] One-command training recipe and Colab notebook for a real chat checkpoint
 - [x] Optional KV caching for generation
 - [x] Optional rotary position embeddings (RoPE)
 - [x] Cosine LR schedule, warmup, gradient clipping
@@ -176,6 +178,30 @@ scale to 10–30M parameters, use a 256–512 token context, and train on a real
 instruction dataset such as TinyStories-Instruct plus a small PersonaChat/Dolly
 subset. See [docs/chat.md](docs/chat.md) for the full workflow, dataset and
 scaling notes.
+
+### Train a real checkpoint
+
+The example JSONL only tests the pipeline. To train something worth serving:
+
+```bash
+./scripts/train_chat.sh                  # ~14M params, GPU recommended
+PROFILE=tiny ./scripts/train_chat.sh     # ~2–3M params, CPU-friendly
+```
+
+The script downloads Alpaca, converts it to chat JSONL + plain text, pretrains a
+Base model, runs assistant-only SFT, and prints the chat/serve commands. Outputs
+land in `checkpoints/chat/` (`base.pt`, `chat.pt`, `chat-best.pt`, `bpe.json`).
+Everything is configurable with environment variables:
+
+```bash
+DATA_SOURCE=dolly DATA_LIMIT=15000 BASE_STEPS=2500 SFT_STEPS=2000 \
+    PROFILE=small DEVICE=cuda ./scripts/train_chat.sh
+```
+
+Or open [`notebooks/train_chat_colab.ipynb`](notebooks/train_chat_colab.ipynb)
+in Colab and run it on a free GPU. See
+[docs/train_chat.md](docs/train_chat.md) for data formats, profiles, expected
+quality and troubleshooting.
 
 ## Web demo
 
@@ -309,7 +335,7 @@ The same suite runs in GitHub Actions on every push and pull request.
 
 ## Project layout
 ```
-data/         training text and chat JSONL examples
+data/         training text, chat examples, instruction-data conversion
 chat/         chat template, special tokens, SFT label construction
 tokenizer/    char + BPE tokenizers, special tokens, vocabulary state
 model/        embeddings, attention, RoPE, transformer, model, sampling
@@ -317,6 +343,8 @@ training/     dataset batching, schedules, evaluation, training + SFT loops
 inference/    text generation, streaming, chat CLI, REPL, evaluation
 server/       FastAPI chat app and streaming event core
 web/          static chat UI (HTML, CSS, JS)
+scripts/      one-command chat training recipe
+notebooks/    Colab notebook for GPU training and serving
 experiments/  attention visualization, temperature test, KV-cache benchmark
 docs/         KV-cache, RoPE and chat/SFT design notes
 checkpoints/  saved weights (git-ignored)

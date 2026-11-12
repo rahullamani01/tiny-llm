@@ -10,6 +10,7 @@ MODULES = (
     "tests.test_rope",
     "tests.test_chat",
     "tests.test_server",
+    "tests.test_prepare_chat",
 )
 
 

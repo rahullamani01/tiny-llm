@@ -138,7 +138,10 @@ def main():
     try:
         model, tok = load_model(args.ckpt, get_device(args.device))
     except (OSError, ValueError, KeyError) as e:
-        raise SystemExit(f"error: could not load {args.ckpt}: {e}")
+        raise SystemExit(
+            f"error: could not load {args.ckpt}: {e}\n"
+            f"train a chat checkpoint with: ./scripts/train_chat.sh"
+        ) from None
 
     missing = [t for t in CHAT_SPECIAL_TOKENS if t not in tok.special_tokens]
     if missing:

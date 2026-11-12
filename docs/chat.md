@@ -46,6 +46,10 @@ tokens increase the vocabulary, so the token embedding and LM head are resized:
 old rows are copied, new rows are initialized, and the output head is re-tied if
 the Base model used weight tying.
 
+For a checkpoint trained on real instruction data, use
+[`scripts/train_chat.sh`](../scripts/train_chat.sh) or the
+[training recipe](train_chat.md).
+
 Important flags:
 
 | flag | meaning |
