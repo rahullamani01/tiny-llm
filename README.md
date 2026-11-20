@@ -34,6 +34,9 @@ YORK:
 The point is the implementation, not the sample quality: every component is
 small enough to read end to end and is covered by the test suite.
 
+For a learning-oriented plan and suggested first experiments, see
+[docs/learning-roadmap.md](docs/learning-roadmap.md).
+
 ## Roadmap
 - [x] Character tokenizer
 - [x] BPE tokenizer (optional)
@@ -108,6 +111,9 @@ Checkpoints are written next to `--out` (default `checkpoints/tinygpt.pt`):
 - `tinygpt.pt` — latest model plus optimizer/step/history, used by `--resume`
 - `best.pt` — best validation loss seen so far
 - `history.json` — loss history used for the training curve
+
+Checkpoint writes replace the previous file only after the new write succeeds.
+Only load checkpoints you trust: PyTorch checkpoint loading can execute code.
 
 ### BPE tokenizer
 

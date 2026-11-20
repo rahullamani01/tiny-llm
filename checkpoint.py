@@ -1,5 +1,6 @@
 """Save and load TinyGPT checkpoints."""
 import os
+import tempfile
 
 import torch
 
@@ -18,7 +19,7 @@ def save_checkpoint(
     train_config=None,
     tokenizer=None,
 ):
-    """Write a resumable checkpoint, creating parent directories as needed."""
+    """Atomically replace a resumable checkpoint after a successful write."""
     payload = {
         "version": FORMAT_VERSION,
         "model": model.state_dict(),
@@ -38,11 +39,22 @@ def save_checkpoint(
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    torch.save(payload, path)
+    # Write beside the destination so os.replace stays on the same filesystem.
+    fd, temporary = tempfile.mkstemp(prefix=".checkpoint-", suffix=".tmp", dir=parent or ".")
+    try:
+        with os.fdopen(fd, "wb") as file:
+            torch.save(payload, file)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def load_checkpoint(path, device="cpu"):
-    """Load a checkpoint, including legacy files without optimizer state."""
+    """Load a trusted checkpoint, including legacy files without optimizer state.
+
+    PyTorch pickle loading can execute code: never load untrusted checkpoints.
+    """
     try:
         return torch.load(path, map_location=device, weights_only=False)
     except TypeError:  # torch < 2.0 has no weights_only argument

@@ -11,11 +11,11 @@ def split_data(data, val_fraction=0.1):
     return {"train": data[:n], "val": data[n:]}
 
 
-def get_batch(data, block_size, batch_size, device):
+def get_batch(data, block_size, batch_size, device, generator=None):
     if len(data) <= block_size:
         raise ValueError("data is shorter than block_size + 1 tokens")
     # pick random starting points in the text
-    ix = torch.randint(len(data) - block_size, (batch_size,))
+    ix = torch.randint(len(data) - block_size, (batch_size,), generator=generator)
     x = torch.stack([data[i : i + block_size] for i in ix])          # inputs
     y = torch.stack([data[i + 1 : i + block_size + 1] for i in ix])  # targets: shifted by 1
     return x.to(device), y.to(device)

@@ -2,6 +2,7 @@
 import math
 import os
 import tempfile
+from unittest.mock import patch
 
 import torch
 
@@ -108,6 +109,33 @@ def test_evaluate_loss():
         raise AssertionError("expected ValueError for short evaluation data")
 
 
+def test_evaluation_preserves_mode_and_seeded_rng():
+    model = _model()
+    data = torch.arange(200) % MODEL_CFG["vocab_size"]
+    model.train()
+    before = torch.random.get_rng_state().clone()
+    first = evaluate_loss(model, data, 8, batch_size=4, iters=3, seed=42)
+    assert model.training
+    assert torch.equal(before, torch.random.get_rng_state())
+    assert first == evaluate_loss(model, data, 8, batch_size=4, iters=3, seed=42)
+    model.eval()
+    evaluate_loss(model, data, 8, batch_size=4, iters=1, seed=42)
+    assert not model.training
+
+
+def test_evaluation_restores_mode_on_failure():
+    model = _model()
+    model.train()
+    with patch.object(model, "forward", side_effect=RuntimeError("test failure")):
+        try:
+            evaluate_loss(model, torch.arange(100), 8, iters=1, seed=0)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected evaluation failure")
+    assert model.training
+
+
 def test_gradient_accumulation_matches_large_batch():
     torch.manual_seed(0)
     model_a = _model()
@@ -187,6 +215,23 @@ def test_checkpoint_roundtrip():
 
         opt2 = torch.optim.AdamW(model2.parameters(), lr=1e-3)
         opt2.load_state_dict(ckpt["optimizer"])
+
+
+def test_failed_checkpoint_write_preserves_previous_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "model.pt")
+        with open(path, "wb") as file:
+            file.write(b"previous checkpoint")
+        with patch("checkpoint.torch.save", side_effect=OSError("disk full")):
+            try:
+                save_checkpoint(path, _model(), None, MODEL_CFG, [], 0, [], 1.0)
+            except OSError:
+                pass
+            else:
+                raise AssertionError("expected checkpoint failure")
+        with open(path, "rb") as file:
+            assert file.read() == b"previous checkpoint"
+        assert os.listdir(tmp) == ["model.pt"]
 
 
 def test_legacy_checkpoint_without_optimizer():
