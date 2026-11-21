@@ -1,0 +1,68 @@
+{
+  "dataset_sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+  "dataset_bytes": 1115394,
+  "train_characters": 1003854,
+  "val_characters": 111540,
+  "config": {
+    "data": "data/training.txt",
+    "output": "docs/experiments/tokenizer-baseline-m5.json",
+    "device": "mps",
+    "seed": 1337,
+    "steps": 100,
+    "batch_size": 8,
+    "block_size": 64,
+    "n_embd": 64,
+    "n_head": 4,
+    "n_layer": 2,
+    "lr": 0.001,
+    "vocab_size": 256,
+    "bpe_max_chars": 20000,
+    "val_fraction": 0.1,
+    "eval_iters": 20,
+    "sample_tokens": 40,
+    "prompts": [
+      "ROMEO:\n",
+      "JULIET:\n"
+    ]
+  },
+  "device": "mps",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "python_version": "3.14.4",
+  "torch_version": "2.14.1",
+  "results": [
+    {
+      "tokenizer": "char",
+      "vocab_size": 65,
+      "parameters": 112193,
+      "train_tokens": 1003854,
+      "val_tokens": 111540,
+      "train_chars_per_token": 1.0,
+      "val_chars_per_token": 1.0,
+      "preparation_seconds": 0.08866854200005037,
+      "training_seconds": 2.1554945410000528,
+      "train_loss_nats_per_token": 2.656916391849518,
+      "val_loss_nats_per_token": 2.6330888748168944,
+      "samples_greedy": {
+        "ROMEO:\n": "ROMEO:\nA:\nAn the the the the the the the the th",
+        "JULIET:\n": "JULIET:\nAn the the the the the the the the the t"
+      }
+    },
+    {
+      "tokenizer": "bpe",
+      "vocab_size": 256,
+      "parameters": 136832,
+      "train_tokens": 556713,
+      "val_tokens": 62881,
+      "train_chars_per_token": 1.8031804538424645,
+      "val_chars_per_token": 1.773826752119082,
+      "preparation_seconds": 1.9282641670001794,
+      "training_seconds": 1.2276299999998628,
+      "train_loss_nats_per_token": 4.297150874137879,
+      "val_loss_nats_per_token": 4.288614988327026,
+      "samples_greedy": {
+        "ROMEO:\n": "ROMEO:\nA IO IO:\nA I shall the shall shall the shall the shall shall shall the shall the ",
+        "JULIET:\n": "JULIET:\nA IO her, and the dododododododododododododododo"
+      }
+    }
+  ]
+}

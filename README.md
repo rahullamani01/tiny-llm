@@ -36,6 +36,8 @@ small enough to read end to end and is covered by the test suite.
 
 For a learning-oriented plan and suggested first experiments, see
 [docs/learning-roadmap.md](docs/learning-roadmap.md).
+For a reproducible small character-vs-BPE baseline, see
+[docs/experiments/tokenizer-baseline.md](docs/experiments/tokenizer-baseline.md).
 
 ## Roadmap
 - [x] Character tokenizer

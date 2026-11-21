@@ -11,6 +11,7 @@ MODULES = (
     "tests.test_chat",
     "tests.test_server",
     "tests.test_prepare_chat",
+    "tests.test_tokenizer_baseline",
 )
 
 
