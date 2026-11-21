@@ -52,4 +52,5 @@ The saved timings are rough observations only: tests ran concurrently, and
 device warmup, tokenizer preparation, model size and text exposure differ.
 Neither runtime nor the two samples supports a conclusion about speed or
 quality. Future work should evaluate both on a common unit such as bits per
-byte, use multiple seeds, and compare matched compute or data budgets.
+byte, use multiple seeds, and compare matched compute or data budgets. The
+[longer comparison](tokenizer-long.md) takes the first two steps.

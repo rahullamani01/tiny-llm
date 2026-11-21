@@ -1,0 +1,223 @@
+{
+  "dataset_sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+  "dataset_bytes": 1115394,
+  "train_characters": 1003854,
+  "val_characters": 111540,
+  "config": {
+    "data": "data/training.txt",
+    "output": "docs/experiments/tokenizer-long-42.json",
+    "device": "mps",
+    "seed": 42,
+    "steps": 1000,
+    "batch_size": 8,
+    "block_size": 64,
+    "n_embd": 64,
+    "n_head": 4,
+    "n_layer": 2,
+    "lr": 0.001,
+    "vocab_size": 256,
+    "bpe_max_chars": 20000,
+    "val_fraction": 0.1,
+    "eval_iters": 40,
+    "eval_interval": 200,
+    "sample_tokens": 80,
+    "prompts": [
+      "ROMEO:\n",
+      "JULIET:\n"
+    ]
+  },
+  "device": "mps",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "python_version": "3.14.4",
+  "torch_version": "2.14.1",
+  "results": [
+    {
+      "tokenizer": "char",
+      "vocab_size": 65,
+      "parameters": 112193,
+      "train_tokens": 1003854,
+      "val_tokens": 111540,
+      "train_chars_per_token": 1.0,
+      "val_chars_per_token": 1.0,
+      "preparation_seconds": 0.08033183300040037,
+      "training_seconds": 12.080465042000014,
+      "train_loss_nats_per_token": 2.1801769733428955,
+      "val_loss_nats_per_token": 2.2185617089271545,
+      "history": [
+        {
+          "step": 200,
+          "train": {
+            "loss_nats_per_token": 2.5053040444850923,
+            "bits_per_byte": 3.6143897208977056,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          },
+          "val": {
+            "loss_nats_per_token": 2.5162070870399473,
+            "bits_per_byte": 3.6301194863221964,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          }
+        },
+        {
+          "step": 400,
+          "train": {
+            "loss_nats_per_token": 2.4134047746658327,
+            "bits_per_byte": 3.481807100068143,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          },
+          "val": {
+            "loss_nats_per_token": 2.4237248480319975,
+            "bits_per_byte": 3.4966958187351196,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          }
+        },
+        {
+          "step": 600,
+          "train": {
+            "loss_nats_per_token": 2.3189531326293946,
+            "bits_per_byte": 3.345542184498354,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          },
+          "val": {
+            "loss_nats_per_token": 2.3277541995048523,
+            "bits_per_byte": 3.3582394400341093,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          }
+        },
+        {
+          "step": 800,
+          "train": {
+            "loss_nats_per_token": 2.233841997385025,
+            "bits_per_byte": 3.2227527717568725,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          },
+          "val": {
+            "loss_nats_per_token": 2.267147397994995,
+            "bits_per_byte": 3.2708023080516964,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          }
+        },
+        {
+          "step": 1000,
+          "train": {
+            "loss_nats_per_token": 2.1801769733428955,
+            "bits_per_byte": 3.145330507702105,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          },
+          "val": {
+            "loss_nats_per_token": 2.2185617089271545,
+            "bits_per_byte": 3.20070797537535,
+            "target_tokens": 20480,
+            "target_bytes": 20480
+          }
+        }
+      ],
+      "samples_greedy": {
+        "ROMEO:\n": "ROMEO:\nThe the the the the the the the the thear theare the the the the the the the the",
+        "JULIET:\n": "JULIET:\nThe the the the the the the the theat the the thear the the the the the the the "
+      }
+    },
+    {
+      "tokenizer": "bpe",
+      "vocab_size": 256,
+      "parameters": 136832,
+      "train_tokens": 556713,
+      "val_tokens": 62881,
+      "train_chars_per_token": 1.8031804538424645,
+      "val_chars_per_token": 1.773826752119082,
+      "preparation_seconds": 2.640519083000072,
+      "training_seconds": 12.521682125000098,
+      "train_loss_nats_per_token": 3.3675582826137545,
+      "val_loss_nats_per_token": 3.537760227918625,
+      "history": [
+        {
+          "step": 200,
+          "train": {
+            "loss_nats_per_token": 3.919032520055771,
+            "bits_per_byte": 3.143822780478631,
+            "target_tokens": 20480,
+            "target_bytes": 36832
+          },
+          "val": {
+            "loss_nats_per_token": 3.922331666946411,
+            "bits_per_byte": 3.194518952145287,
+            "target_tokens": 20480,
+            "target_bytes": 36278
+          }
+        },
+        {
+          "step": 400,
+          "train": {
+            "loss_nats_per_token": 3.691933864355087,
+            "bits_per_byte": 2.961645693773129,
+            "target_tokens": 20480,
+            "target_bytes": 36832
+          },
+          "val": {
+            "loss_nats_per_token": 3.7339488744735716,
+            "bits_per_byte": 3.041091743048245,
+            "target_tokens": 20480,
+            "target_bytes": 36278
+          }
+        },
+        {
+          "step": 600,
+          "train": {
+            "loss_nats_per_token": 3.5667555570602416,
+            "bits_per_byte": 2.8612284576105442,
+            "target_tokens": 20480,
+            "target_bytes": 36832
+          },
+          "val": {
+            "loss_nats_per_token": 3.662828856706619,
+            "bits_per_byte": 2.983168481089545,
+            "target_tokens": 20480,
+            "target_bytes": 36278
+          }
+        },
+        {
+          "step": 800,
+          "train": {
+            "loss_nats_per_token": 3.457989013195038,
+            "bits_per_byte": 2.773976632929975,
+            "target_tokens": 20480,
+            "target_bytes": 36832
+          },
+          "val": {
+            "loss_nats_per_token": 3.600243777036667,
+            "bits_per_byte": 2.9321964470792667,
+            "target_tokens": 20480,
+            "target_bytes": 36278
+          }
+        },
+        {
+          "step": 1000,
+          "train": {
+            "loss_nats_per_token": 3.3675582826137545,
+            "bits_per_byte": 2.701433680198182,
+            "target_tokens": 20480,
+            "target_bytes": 36832
+          },
+          "val": {
+            "loss_nats_per_token": 3.537760227918625,
+            "bits_per_byte": 2.8813071040038296,
+            "target_tokens": 20480,
+            "target_bytes": 36278
+          }
+        }
+      ],
+      "samples_greedy": {
+        "ROMEO:\n": "ROMEO:\nWhy, I will not so me me mearry s,\nAnd thou so more more as to the cone,\nAnd so more as to the caputers to the cone,\nAnd so me to the cone,\nAnd so me a",
+        "JULIET:\n": "JULIET:\nWhy, thou so so so so more me,\nAnd shall be plose as to the dage,\nAnd shall not shall m as as as as to the purself,\nAnd so shall be shall be so-"
+      }
+    }
+  ]
+}

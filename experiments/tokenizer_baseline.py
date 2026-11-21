@@ -2,17 +2,18 @@
 import argparse
 import hashlib
 import json
+import math
 import platform
 import time
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 
 from inference.generate import generate_text
 from model.model import TinyGPT
 from tokenizer import BPETokenizer, CharTokenizer
 from training.dataset import get_batch
-from training.evaluate import evaluate_loss
 from utils import get_device, set_seed
 
 
@@ -24,6 +25,47 @@ def split_text(text, val_fraction):
     if n <= 0 or n >= len(text):
         raise ValueError("text is too short for the requested split")
     return text[:n], text[n:]
+
+
+def evaluate_metrics(model, data, tok, block_size, batch_size, iters, device, seed):
+    """Estimate token loss and bits per UTF-8 byte over sampled target tokens."""
+    if iters < 1 or batch_size < 1 or block_size < 1 or len(data) <= block_size:
+        raise ValueError("evaluation sizes must be positive and data longer than block_size")
+    byte_lengths = torch.tensor(
+        [len(tok.decode([i]).encode("utf-8")) for i in range(tok.vocab_size)],
+        dtype=torch.long, device=device,
+    )
+    generator = torch.Generator().manual_seed(seed)
+    total_nats, total_bytes, total_tokens = 0.0, 0, 0
+    was_training = model.training
+    model.eval()
+    try:
+        with torch.no_grad():
+            for _ in range(iters):
+                x, y = get_batch(data, block_size, batch_size, device, generator=generator)
+                logits, _ = model(x)
+                total_nats += F.cross_entropy(
+                    logits.reshape(-1, logits.size(-1)), y.reshape(-1), reduction="sum"
+                ).item()
+                total_bytes += byte_lengths[y].sum().item()
+                total_tokens += y.numel()
+    finally:
+        model.train(was_training)
+    if total_bytes == 0:
+        raise ValueError("sampled targets contain no bytes")
+    return {
+        "loss_nats_per_token": total_nats / total_tokens,
+        "bits_per_byte": total_nats / (math.log(2) * total_bytes),
+        "target_tokens": total_tokens,
+        "target_bytes": total_bytes,
+    }
+
+
+def synchronize(device):
+    if device.type == "mps":
+        torch.mps.synchronize()
+    elif device.type == "cuda":
+        torch.cuda.synchronize()
 
 
 def run_one(kind, train_text, val_text, args, device):
@@ -45,24 +87,27 @@ def run_one(kind, train_text, val_text, args, device):
     model = TinyGPT(tok.vocab_size, args.block_size, args.n_embd, args.n_head,
                     args.n_layer, dropout=0.0).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    start = time.perf_counter()
+    history = []
+    training_seconds = 0.0
     model.train()
-    for _ in range(args.steps):
+    synchronize(device)
+    start = time.perf_counter()
+    for step in range(1, args.steps + 1):
         x, y = get_batch(train, args.block_size, args.batch_size, device)
         optimizer.zero_grad(set_to_none=True)
         _, loss = model(x, y)
         loss.backward()
         optimizer.step()
-    if device.type == "mps":
-        torch.mps.synchronize()
-    elif device.type == "cuda":
-        torch.cuda.synchronize()
-    training_seconds = time.perf_counter() - start
-
-    train_loss = evaluate_loss(model, train, args.block_size, args.batch_size,
-                               args.eval_iters, device, seed=args.seed + 1)
-    val_loss = evaluate_loss(model, val, args.block_size, args.batch_size,
-                             args.eval_iters, device, seed=args.seed + 2)
+        if step % args.eval_interval == 0 or step == args.steps:
+            synchronize(device)
+            training_seconds += time.perf_counter() - start
+            train_metrics = evaluate_metrics(model, train, tok, args.block_size,
+                                             args.batch_size, args.eval_iters, device, 101)
+            val_metrics = evaluate_metrics(model, val, tok, args.block_size,
+                                           args.batch_size, args.eval_iters, device, 102)
+            history.append({"step": step, "train": train_metrics, "val": val_metrics})
+            synchronize(device)
+            start = time.perf_counter()
     model.eval()
     samples = {}
     for prompt in args.prompts:
@@ -78,8 +123,9 @@ def run_one(kind, train_text, val_text, args, device):
         "val_chars_per_token": len(val_text) / len(val),
         "preparation_seconds": preparation_seconds,
         "training_seconds": training_seconds,
-        "train_loss_nats_per_token": train_loss,
-        "val_loss_nats_per_token": val_loss,
+        "train_loss_nats_per_token": history[-1]["train"]["loss_nats_per_token"],
+        "val_loss_nats_per_token": history[-1]["val"]["loss_nats_per_token"],
+        "history": history,
         "samples_greedy": samples,
     }
 
@@ -101,10 +147,12 @@ def main():
     p.add_argument("--bpe-max-chars", type=int, default=20000)
     p.add_argument("--val-fraction", type=float, default=0.1)
     p.add_argument("--eval-iters", type=int, default=20)
+    p.add_argument("--eval-interval", type=int, default=100)
     p.add_argument("--sample-tokens", type=int, default=40)
     args = p.parse_args()
     if min(args.steps, args.batch_size, args.block_size, args.n_embd, args.n_head,
-           args.n_layer, args.vocab_size, args.bpe_max_chars, args.eval_iters) < 1:
+           args.n_layer, args.vocab_size, args.bpe_max_chars, args.eval_iters,
+           args.eval_interval) < 1:
         p.error("sizes, steps and evaluation iterations must be positive")
     if args.n_embd % args.n_head or args.lr <= 0 or args.sample_tokens < 0:
         p.error("embedding size must divide by heads; lr must be positive and sample tokens nonnegative")
