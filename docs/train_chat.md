@@ -18,8 +18,9 @@ PROFILE=tiny ./scripts/train_chat.sh     # ~2–3M params, CPU-friendly
 
 The script runs three stages:
 
-1. **Prepare data** — download Alpaca (52k instructions), convert it to
-   `data/cache/chat.jsonl`, and write `data/cache/text.txt` for Base training.
+1. **Prepare data** — download Alpaca (52k instructions), group matching user
+   prompts and hold out `data/cache/chat-val.jsonl`; only training conversations
+   go into `data/cache/chat.jsonl` and the Base `data/cache/text.txt`.
 2. **Pretrain Base** — `training.train` on the plain text, BPE tokenizer,
    `checkpoints/chat/base.pt`.
 3. **SFT** — `training.sft --init-from base.pt`, assistant-only loss,
@@ -92,7 +93,21 @@ window (default 2000), `--format text` writes plain text instead of chat JSONL,
 and `--shuffle --seed` makes the subset reproducible.
 
 The converter deduplicates identical instruction/answer pairs and skips empty
-records. Downloads are cached in `data/cache/`, which is git-ignored.
+records. For a held-out split before pretraining, add
+`--val-out data/cache/chat-val.jsonl`. The `--out` and `--text-out` files then
+contain only training conversations. Pass `--val-data data/cache/chat-val.jsonl`
+to SFT. Prompt groups are matched after case-folding and whitespace
+normalization; similar paraphrases are not detected. Splitting by group means
+the actual conversation fraction can differ from `--val-fraction`.
+Downloads are cached in `data/cache/`, which is git-ignored.
+
+The base model and any externally supplied tokenizer must also be trained
+without the held-out data for the SFT validation loss to be a genuine holdout.
+The recipe does this, but cannot verify an externally supplied checkpoint's
+training data. The recipe requires a fresh `CKPT_DIR` so it cannot silently reuse
+an old vocabulary or overwrite checkpoints. Validation characters absent from the training vocabulary cause
+a clear error; use more representative training data rather than learning a
+vocabulary from the holdout.
 
 Alpaca is a research dataset generated with OpenAI models; Dolly is released by
 Databricks. Check each dataset's license before redistributing derived data.
@@ -113,6 +128,8 @@ the SFT format:
 A few thousand consistent examples beat 50k unrelated ones. Keep answers short
 (one to three sentences), include the same system prompt you will serve with,
 and hold out a validation split (SFT does this automatically per conversation).
+For multi-stage runs, split before Base pretraining as above, rather than
+relying on SFT's automatic split afterwards.
 
 ## Pipeline details
 
@@ -127,6 +144,9 @@ old ids never move, and the embedding/LM head are resized automatically.
 
 **Loss.** Only assistant content and the closing `<|end|>` token are trained.
 System prompts, user turns, and role markers are masked with `-100`.
+Inputs predict the next token, with labels shifted by one position. Earlier
+versions mistakenly trained on the current token. Old SFT checkpoints may have
+learned that incorrect objective; start a new SFT run rather than resuming one.
 
 **Checkpoints.** `base.pt` is the latest Base checkpoint, `chat.pt` the latest
 resumable SFT checkpoint, and `chat-best.pt` the best validation loss. Resume an

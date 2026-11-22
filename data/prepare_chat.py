@@ -268,6 +268,8 @@ def parse_args():
     p.add_argument("--input", default=None, help="local JSON/JSONL file")
     p.add_argument("--download-dir", default=DEFAULT_DOWNLOAD_DIR)
     p.add_argument("--out", default=None, help="chat JSONL output path")
+    p.add_argument("--val-out", default=None, help="hold out prompt groups to this JSONL file")
+    p.add_argument("--val-fraction", type=float, default=0.1)
     p.add_argument(
         "--text-out",
         default=None,
@@ -309,6 +311,21 @@ def main():
         args.download_dir,
         f"{args.source}_{args.format}." + ("jsonl" if args.format == "chat" else "txt"),
     )
+    if args.val_out:
+        if args.format != "chat":
+            raise SystemExit("error: --val-out requires --format chat")
+        paths = [base, args.val_out] + ([args.text_out] if args.text_out else [])
+        if len({os.path.abspath(path) for path in paths}) != len(paths):
+            raise SystemExit("error: output paths must be distinct")
+        from training.sft import split_conversations
+        try:
+            conversations, validation = split_conversations(
+                conversations, args.val_fraction, args.seed
+            )
+        except ValueError as e:
+            raise SystemExit(f"error: {e}") from None
+        write_chat_jsonl(validation, args.val_out)
+        print(f"wrote {len(validation)} held-out conversations to {args.val_out}")
     if args.format == "text":
         write_text(conversations, base)
         print(f"wrote {len(conversations)} text examples to {base}")

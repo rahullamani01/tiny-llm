@@ -1,6 +1,9 @@
 """Tests for instruction-data conversion used by the chat training recipe."""
 import os
 import tempfile
+import subprocess
+import sys
+import json
 
 from data.prepare_chat import (
     clean_text,
@@ -137,6 +140,33 @@ def test_prepare_local_input_with_limit_and_shuffle():
             assert "--input" in str(e)
         else:
             raise AssertionError("expected ValueError without --input")
+
+
+def test_cli_holdout_excludes_validation_from_pretraining_text():
+    records = [
+        {"instruction": "same prompt", "output": "answer one"},
+        {"instruction": " SAME  PROMPT ", "output": "answer two"},
+        {"instruction": "another prompt", "output": "answer three"},
+        {"instruction": "third prompt", "output": "answer four"},
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        input_path = os.path.join(tmp, "input.json")
+        train = os.path.join(tmp, "train.jsonl")
+        val = os.path.join(tmp, "val.jsonl")
+        text = os.path.join(tmp, "base.txt")
+        with open(input_path, "w", encoding="utf-8") as f:
+            json.dump(records, f)
+        subprocess.run([sys.executable, "-m", "data.prepare_chat", "--source", "input",
+                        "--input", input_path, "--out", train, "--val-out", val,
+                        "--text-out", text, "--seed", "3"], check=True, capture_output=True)
+        train_convs = load_conversations(train)
+        val_convs = load_conversations(val)
+        from training.sft import prompt_key
+        assert not {prompt_key(c) for c in train_convs} & {prompt_key(c) for c in val_convs}
+        with open(text, encoding="utf-8") as f:
+            base_text = f.read()
+        for conv in val_convs:
+            assert conv["messages"][1]["content"] not in base_text
 
 
 if __name__ == "__main__":

@@ -1,6 +1,9 @@
 """Tests for chat templates, special tokens, and the SFT data path."""
 import os
 import tempfile
+import json
+import subprocess
+import sys
 
 import torch
 
@@ -126,8 +129,8 @@ def test_sft_batch_has_supervision_and_finite_loss():
     tok = _tok()
     conversations = [
         {"messages": _conversation(), "system": None},
-        {"messages": _conversation(), "system": None},
-        {"messages": _conversation(), "system": None},
+        {"messages": [{"role": USER, "content": "a"}, {"role": ASSISTANT, "content": "hello"}], "system": None},
+        {"messages": [{"role": USER, "content": "b"}, {"role": ASSISTANT, "content": "hello"}], "system": None},
     ]
     train, val = split_conversations(conversations, val_fraction=0.34, seed=0)
     assert train and val
@@ -146,6 +149,57 @@ def test_sft_batch_has_supervision_and_finite_loss():
     )
     _, loss = model(x, y)
     assert torch.isfinite(loss)
+
+
+def test_sft_batch_predicts_next_token_even_in_fallback():
+    ids = torch.arange(12)
+    labels = torch.full_like(ids, -100)
+    labels[11] = 11
+    x, y = get_sft_batch(ids, labels, block_size=4, batch_size=32, device="cpu")
+    assert (y != -100).any(dim=1).all()
+    assert torch.all(y[y != -100] == 11)
+    assert torch.all(x[:, -1] == 10)
+
+
+def test_sft_split_keeps_matching_prompts_together():
+    def conv(question, answer):
+        return {"messages": [{"role": USER, "content": question},
+                             {"role": ASSISTANT, "content": answer}]}
+    conversations = [conv(" Hello  world ", "one"), conv("hello world", "two"),
+                     conv("different", "three"), conv("other", "four")]
+    train, val = split_conversations(conversations, seed=4)
+    assert (conversations[0] in train) == (conversations[1] in train)
+    assert (train, val) == split_conversations(conversations, seed=4)
+    try:
+        split_conversations(conversations[:2])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected failure for a single prompt group")
+
+
+def test_sft_cli_trains_with_separate_holdout():
+    with tempfile.TemporaryDirectory() as tmp:
+        train = os.path.join(tmp, "train.jsonl")
+        val = os.path.join(tmp, "val.jsonl")
+        for path, prompt in ((train, "abba"), (val, "baab")):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"messages": [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": "abababab"},
+                ]}) + "\n")
+        output = os.path.join(tmp, "chat.pt")
+        subprocess.run([
+            sys.executable, "-m", "training.sft", "--data", train, "--val-data", val,
+            "--tokenizer", "char", "--out", output, "--block-size", "8",
+            "--n-embd", "8", "--n-head", "2", "--n-layer", "1",
+            "--batch-size", "2", "--max-steps", "2", "--warmup-steps", "0",
+            "--eval-interval", "1", "--eval-iters", "1", "--device", "cpu", "--no-plot",
+        ], check=True, capture_output=True)
+        from checkpoint import load_checkpoint
+        ckpt = load_checkpoint(output)
+        assert ckpt["step"] == 2
+        assert ckpt["train_config"]["sft_objective"] == "next_token_v1"
 
 
 def test_load_conversations_and_split():

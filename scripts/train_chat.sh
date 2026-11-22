@@ -7,7 +7,7 @@
 #
 # Steps:
 #   1. download Alpaca (or Dolly) and convert it to chat JSONL + plain text
-#   2. pretrain a Base model on the same text
+#   2. pretrain a Base model on training conversations only
 #   3. supervised fine-tune with assistant-only loss
 #
 # Outputs (CKPT_DIR defaults to checkpoints/chat):
@@ -77,6 +77,15 @@ SEED="${SEED:-0}"
 
 mkdir -p "$DATA_DIR" "$CKPT_DIR"
 
+# A reused vocabulary may have been trained on the new validation set.
+# Existing checkpoints should not be silently replaced by a fresh run either.
+for file in bpe.json base.pt best.pt chat.pt chat-best.pt; do
+  if [[ -e "$CKPT_DIR/$file" ]]; then
+    echo "error: $CKPT_DIR/$file already exists; use a fresh CKPT_DIR for a new run" >&2
+    exit 1
+  fi
+done
+
 derive_warmup() {
   local warm=$(( $1 / 10 ))
   if (( warm > 100 )); then
@@ -100,6 +109,7 @@ echo "==> 1/3 preparing $DATA_SOURCE data (limit $DATA_LIMIT)"
   --shuffle --seed "$SEED" \
   --download-dir "$DATA_DIR" \
   --out "$DATA_DIR/chat.jsonl" \
+  --val-out "$DATA_DIR/chat-val.jsonl" \
   --text-out "$DATA_DIR/text.txt"
 
 echo
@@ -129,6 +139,7 @@ echo
 echo "==> 3/3 chat SFT ($SFT_STEPS steps)"
 "$PYTHON" -m training.sft \
   --data "$DATA_DIR/chat.jsonl" \
+  --val-data "$DATA_DIR/chat-val.jsonl" \
   --init-from "$CKPT_DIR/base.pt" \
   --out "$CKPT_DIR/chat.pt" \
   --block-size "$BLOCK" \

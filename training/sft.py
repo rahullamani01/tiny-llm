@@ -83,18 +83,30 @@ def conversation_text(conversations, system=None):
     return "\n".join(chunks)
 
 
+def prompt_key(conversation):
+    """Group exact normalized user prompts, including multi-turn user history."""
+    return tuple(
+        " ".join(message["content"].split()).casefold()
+        for message in conversation["messages"] if message["role"] == "user"
+    )
+
+
 def split_conversations(conversations, val_fraction=0.1, seed=0):
     if not 0.0 < val_fraction < 1.0:
         raise ValueError("val_fraction must be in (0, 1)")
     if len(conversations) < 2:
         raise ValueError("need at least 2 conversations to make train/val splits")
 
-    indices = list(range(len(conversations)))
-    random.Random(seed).shuffle(indices)
-    n_train = int((1.0 - val_fraction) * len(indices))
-    n_train = min(max(n_train, 1), len(indices) - 1)
-    train = [conversations[i] for i in indices[:n_train]]
-    val = [conversations[i] for i in indices[n_train:]]
+    groups = {}
+    for conv in conversations:
+        groups.setdefault(prompt_key(conv), []).append(conv)
+    keys = list(groups)
+    if len(keys) < 2:
+        raise ValueError("need at least 2 distinct user prompt groups for train/val")
+    random.Random(seed).shuffle(keys)
+    n_train = min(max(int((1.0 - val_fraction) * len(keys)), 1), len(keys) - 1)
+    train = [conv for key in keys[:n_train] for conv in groups[key]]
+    val = [conv for key in keys[n_train:] for conv in groups[key]]
     return train, val
 
 
@@ -118,11 +130,11 @@ def encode_conversations(conversations, tokenizer, system=None):
 
 def _window_with_labels(labels, block_size):
     """Pick a start index whose window contains at least one supervised token."""
-    valid = torch.nonzero(labels != IGNORE_INDEX).flatten()
+    valid = torch.nonzero(labels[1:] != IGNORE_INDEX).flatten() + 1
     if valid.numel() == 0:
         raise ValueError("conversation split has no assistant tokens")
     pos = int(valid[torch.randint(valid.numel(), (1,))].item())
-    return min(max(0, pos), len(labels) - block_size)
+    return min(max(0, pos - 1), len(labels) - block_size - 1)
 
 
 def get_sft_batch(ids, labels, block_size, batch_size, device):
@@ -136,14 +148,14 @@ def get_sft_batch(ids, labels, block_size, batch_size, device):
 
     starts = torch.randint(len(ids) - block_size, (batch_size,))
     x = torch.stack([ids[i : i + block_size] for i in starts])
-    y = torch.stack([labels[i : i + block_size] for i in starts])
+    y = torch.stack([labels[i + 1 : i + block_size + 1] for i in starts])
 
     for row in range(batch_size):
         if (y[row] != IGNORE_INDEX).any():
             continue
         start = _window_with_labels(labels, block_size)
         x[row] = ids[start : start + block_size]
-        y[row] = labels[start : start + block_size]
+        y[row] = labels[start + 1 : start + block_size + 1]
     return x.to(device), y.to(device)
 
 
@@ -300,6 +312,7 @@ def build_tokenizer(args, conversations, base_ckpt=None):
 def parse_args():
     p = argparse.ArgumentParser(description="Supervised fine-tuning for chat.")
     p.add_argument("--data", required=True, help="JSONL conversations")
+    p.add_argument("--val-data", default=None, help="separate held-out JSONL conversations")
     p.add_argument("--out", default="checkpoints/tinygpt-chat.pt")
     p.add_argument("--best-out", default=None)
     p.add_argument("--init-from", default=None, help="pretrained Base checkpoint")
@@ -357,26 +370,31 @@ def main():
         conversations = load_conversations(args.data)
     except (OSError, ValueError) as e:
         raise SystemExit(f"error: {e}")
-    print(f"conversations: {len(conversations)}")
+    try:
+        if args.val_data:
+            train_convs = conversations
+            val_convs = load_conversations(args.val_data)
+            if {prompt_key(c) for c in train_convs} & {prompt_key(c) for c in val_convs}:
+                raise ValueError("train and validation contain matching normalized user prompts")
+        else:
+            train_convs, val_convs = split_conversations(
+                conversations, cfg["val_fraction"], seed=cfg["seed"]
+            )
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"error: {e}") from None
+    print(f"conversations: train {len(train_convs)} | val {len(val_convs)}")
 
     base_ckpt = None
     if args.init_from:
         if not os.path.exists(args.init_from):
             raise SystemExit(f"error: no base checkpoint at {args.init_from}")
         base_ckpt = load_checkpoint(args.init_from, device)
-    tok, vocab_path = build_tokenizer(args, conversations, base_ckpt)
+    tok, vocab_path = build_tokenizer(args, train_convs, base_ckpt)
     tok_state = tok.to_dict()
     print(
         f"tokenizer: {tok_state.get('type')} | vocab {tok.vocab_size} | "
         f"specials {len(tok.special_tokens)}"
     )
-
-    try:
-        train_convs, val_convs = split_conversations(
-            conversations, cfg["val_fraction"], seed=cfg["seed"]
-        )
-    except ValueError as e:
-        raise SystemExit(f"error: {e}")
 
     try:
         train_ids, train_labels = encode_conversations(
@@ -442,6 +460,11 @@ def main():
         if not os.path.exists(args.out):
             raise SystemExit(f"error: no checkpoint at {args.out} to resume from")
         ckpt = load_checkpoint(args.out, device)
+        if ckpt.get("train_config", {}).get("sft_objective") != "next_token_v1":
+            raise SystemExit(
+                "error: cannot resume an older SFT checkpoint trained with the "
+                "previous objective; start a new SFT run"
+            )
         _checkpoint_matches(ckpt["config"], model_cfg)
         if ckpt.get("tokenizer") is not None and ckpt["tokenizer"] != tok_state:
             raise SystemExit("error: checkpoint tokenizer does not match the current vocabulary")
@@ -456,6 +479,8 @@ def main():
     train_config = dict(cfg)
     train_config.update(
         data=args.data,
+        val_data=args.val_data,
+        sft_objective="next_token_v1",
         device=str(device),
         init_from=args.init_from,
         tokenizer=args.tokenizer,

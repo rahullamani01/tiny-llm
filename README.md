@@ -181,6 +181,9 @@ with `-100`. The chat CLI keeps multi-turn history, trims old turns to the
 context window, streams replies, and supports `/system`, `/reset`, `/temp`,
 `/topk`, `/topp`, `/penalty`, and `/tokens`.
 
+SFT now predicts the next token correctly; older SFT checkpoints used an
+incorrect same-token objective and should be retrained, not resumed.
+
 `data/chat_example.jsonl` only has 10 conversations, so it proves the plumbing
 rather than producing a useful assistant. If a split is shorter than
 `--block-size`, SFT automatically uses smaller windows for batching. For a model that can actually chat,
