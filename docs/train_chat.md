@@ -148,6 +148,15 @@ Inputs predict the next token, with labels shifted by one position. Earlier
 versions mistakenly trained on the current token. Old SFT checkpoints may have
 learned that incorrect objective; start a new SFT run rather than resuming one.
 
+SFT evaluation uses fixed sampled windows (`--eval-seed`, default 0) and a
+separate random generator so evaluations do not change the subsequent training
+batches. The reported value is the mean of batch losses, not a global
+token-weighted loss; windows can overlap and it is not a full validation-set
+score. Changing the evaluation seed, or resuming a run saved before this option
+existed, resets best-loss tracking; earlier history remains but was measured
+on different windows. The next evaluation can replace the previous best
+checkpoint. Use a separate output directory if you need to preserve it.
+
 **Checkpoints.** `base.pt` is the latest Base checkpoint, `chat.pt` the latest
 resumable SFT checkpoint, and `chat-best.pt` the best validation loss. Resume an
 interrupted SFT run with:
