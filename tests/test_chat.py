@@ -4,6 +4,7 @@ import tempfile
 import json
 import subprocess
 import sys
+from unittest.mock import patch
 
 import torch
 
@@ -28,6 +29,7 @@ from tokenizer import (
 from training.sft import (
     _resize_embeddings,
     encode_conversations,
+    evaluate_sft_loss,
     get_sft_batch,
     load_base_weights,
     load_conversations,
@@ -159,6 +161,43 @@ def test_sft_batch_predicts_next_token_even_in_fallback():
     assert (y != -100).any(dim=1).all()
     assert torch.all(y[y != -100] == 11)
     assert torch.all(x[:, -1] == 10)
+
+
+def test_seeded_sft_evaluation_preserves_rng_and_mode():
+    torch.manual_seed(12)
+    model = TinyGPT(vocab_size=12, block_size=4, n_embd=8, n_head=2, n_layer=1)
+    ids = torch.arange(12).repeat(4)
+    labels = torch.full_like(ids, -100)
+    labels[4::9] = ids[4::9]
+    model.train()
+    before = torch.random.get_rng_state().clone()
+    first = evaluate_sft_loss(model, ids, labels, 4, batch_size=3, iters=3, seed=7)
+    assert model.training
+    assert torch.equal(before, torch.random.get_rng_state())
+    assert first == evaluate_sft_loss(model, ids, labels, 4, batch_size=3, iters=3, seed=7)
+    model.eval()
+    evaluate_sft_loss(model, ids, labels, 4, batch_size=3, iters=1, seed=7)
+    assert not model.training
+    model.train()
+    with patch.object(model, "forward", side_effect=RuntimeError("failure")):
+        try:
+            evaluate_sft_loss(model, ids, labels, 4, batch_size=3, iters=1, seed=7)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected evaluation failure")
+    assert model.training
+
+
+def test_sft_fallback_uses_local_generator():
+    ids = torch.arange(12)
+    labels = torch.full_like(ids, -100)
+    labels[11] = 11
+    before = torch.random.get_rng_state().clone()
+    first = get_sft_batch(ids, labels, 4, 5, "cpu", generator=torch.Generator().manual_seed(4))
+    second = get_sft_batch(ids, labels, 4, 5, "cpu", generator=torch.Generator().manual_seed(4))
+    assert all(torch.equal(a, b) for a, b in zip(first, second))
+    assert torch.equal(before, torch.random.get_rng_state())
 
 
 def test_sft_split_keeps_matching_prompts_together():

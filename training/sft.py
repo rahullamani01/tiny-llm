@@ -129,16 +129,16 @@ def encode_conversations(conversations, tokenizer, system=None):
     )
 
 
-def _window_with_labels(labels, block_size):
+def _window_with_labels(labels, block_size, generator=None):
     """Pick a start index whose window contains at least one supervised token."""
     valid = torch.nonzero(labels[1:] != IGNORE_INDEX).flatten() + 1
     if valid.numel() == 0:
         raise ValueError("conversation split has no assistant tokens")
-    pos = int(valid[torch.randint(valid.numel(), (1,))].item())
+    pos = int(valid[torch.randint(valid.numel(), (1,), generator=generator)].item())
     return min(max(0, pos - 1), len(labels) - block_size - 1)
 
 
-def get_sft_batch(ids, labels, block_size, batch_size, device):
+def get_sft_batch(ids, labels, block_size, batch_size, device, generator=None):
     """Sample fixed-size windows; every row has at least one trained token."""
     if len(ids) != len(labels):
         raise ValueError("ids and labels must have the same length")
@@ -147,14 +147,14 @@ def get_sft_batch(ids, labels, block_size, batch_size, device):
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
 
-    starts = torch.randint(len(ids) - block_size, (batch_size,))
+    starts = torch.randint(len(ids) - block_size, (batch_size,), generator=generator)
     x = torch.stack([ids[i : i + block_size] for i in starts])
     y = torch.stack([labels[i + 1 : i + block_size + 1] for i in starts])
 
     for row in range(batch_size):
         if (y[row] != IGNORE_INDEX).any():
             continue
-        start = _window_with_labels(labels, block_size)
+        start = _window_with_labels(labels, block_size, generator=generator)
         x[row] = ids[start : start + block_size]
         y[row] = labels[start + 1 : start + block_size + 1]
     return x.to(device), y.to(device)
@@ -163,23 +163,31 @@ def get_sft_batch(ids, labels, block_size, batch_size, device):
 def evaluate_sft_loss(
     model, ids, labels, block_size, batch_size=8, iters=20, device=None, seed=None
 ):
-    """Average loss over assistant tokens only (masked labels are ignored)."""
+    """Average batch loss over assistant tokens, preserving the model's mode.
+
+    When seeded, batch sampling uses a local generator instead of changing the
+    training random state. Reusing the seed evaluates the same sampled windows.
+    """
     if iters < 1:
         raise ValueError("iters must be >= 1")
     device = device or next(model.parameters()).device
-    if seed is not None:
-        set_seed(seed)
+    generator = None if seed is None else torch.Generator().manual_seed(seed)
 
+    was_training = model.training
     model.eval()
     total, count = 0.0, 0
-    with torch.no_grad():
-        for _ in range(iters):
-            xb, yb = get_sft_batch(ids, labels, block_size, batch_size, device)
-            _, loss = model(xb, yb)
-            if torch.isfinite(loss):
-                total += loss.item()
-                count += 1
-    model.train()
+    try:
+        with torch.no_grad():
+            for _ in range(iters):
+                xb, yb = get_sft_batch(
+                    ids, labels, block_size, batch_size, device, generator=generator
+                )
+                _, loss = model(xb, yb)
+                if torch.isfinite(loss):
+                    total += loss.item()
+                    count += 1
+    finally:
+        model.train(was_training)
     return total / count if count else float("inf")
 
 
@@ -343,6 +351,8 @@ def parse_args():
     p.add_argument("--max-steps", type=int, default=2000)
     p.add_argument("--eval-interval", type=int, default=200)
     p.add_argument("--eval-iters", type=int, default=20)
+    p.add_argument("--eval-seed", type=int, default=0,
+                   help="fixed sampling seed for evaluation batches")
     p.add_argument("--patience", type=int, default=0)
     p.add_argument("--val-fraction", type=float, default=0.1)
     p.add_argument("--no-plot", action="store_true")
@@ -475,12 +485,19 @@ def main():
         start_step = int(ckpt.get("step", 0))
         history = list(ckpt.get("history", []))
         best_val = float(ckpt.get("best_val_loss", float("inf")))
+        if ckpt.get("train_config", {}).get("eval_seed") != args.eval_seed:
+            best_val = float("inf")
+            print(
+                "warning: evaluation sampling changed; resetting best validation "
+                "loss (older history uses different batches)"
+            )
         print(f"resumed from {args.out} at step {start_step}")
 
     train_config = dict(cfg)
     train_config.update(
         data=args.data,
         val_data=args.val_data,
+        eval_seed=args.eval_seed,
         sft_objective="next_token_v1",
         device=str(device),
         init_from=args.init_from,
@@ -534,6 +551,7 @@ def main():
             cfg["batch_size"],
             cfg["eval_iters"],
             device,
+            seed=args.eval_seed,
         )
         val_loss = evaluate_sft_loss(
             model,
@@ -543,6 +561,7 @@ def main():
             cfg["batch_size"],
             cfg["eval_iters"],
             device,
+            seed=args.eval_seed + 1,
         )
         entry = (step, train_loss, val_loss)
         if history and history[-1][0] == step:
