@@ -9,6 +9,7 @@ import torch
 from chat.template import CHAT_SPECIAL_TOKENS, build_chat_prompt
 from inference.chat import DEFAULT_SYSTEM
 from inference.generate import load_model
+from tokenizer import incremental_decoder
 from utils import get_device
 
 
@@ -30,6 +31,7 @@ def complete(model, tok, prompt, max_tokens, chat=False, system=DEFAULT_SYSTEM):
         ids = tok.encode(prompt + "\n\n")[-model.block_size:]
     idx = torch.tensor([ids], dtype=torch.long, device=next(model.parameters()).device)
     pieces = []
+    decoder = incremental_decoder(tok)
     stop = "token_limit"
     model.eval()
     for out in model.generate_stream(idx, max_tokens, temperature=0):
@@ -37,7 +39,8 @@ def complete(model, tok, prompt, max_tokens, chat=False, system=DEFAULT_SYSTEM):
         if tok.is_special_id(token):
             stop = "special_token"
             break
-        pieces.append(tok.decode([token]))
+        pieces.append(decoder.push(token))
+    pieces.append(decoder.finish())
     return {"text": "".join(pieces), "stop": stop}
 
 

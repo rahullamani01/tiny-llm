@@ -4,7 +4,7 @@ import argparse
 import torch
 
 from checkpoint import load_checkpoint
-from tokenizer import CharTokenizer, tokenizer_from_state
+from tokenizer import CharTokenizer, incremental_decoder, tokenizer_from_state
 from model.model import TinyGPT
 from utils import get_device, set_seed
 
@@ -80,6 +80,7 @@ def stream_text(
     idx = _encode_prompt(tok, prompt, device)
     if seed is not None:
         set_seed(seed)
+    decoder = incremental_decoder(tok)
     for out in model.generate_stream(
         idx,
         max_new_tokens,
@@ -89,7 +90,12 @@ def stream_text(
         repetition_penalty=repetition_penalty,
         use_cache=use_cache,
     ):
-        yield tok.decode(out[0, -1:].tolist())
+        piece = decoder.push(out[0, -1].item())
+        if piece:
+            yield piece
+    tail = decoder.finish()
+    if tail:
+        yield tail
 
 
 if __name__ == "__main__":

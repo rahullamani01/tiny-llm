@@ -3,10 +3,12 @@ import json
 import os
 
 from tokenizer.bpe import BPETokenizer
+from tokenizer.byte import ByteTokenizer
 from tokenizer.tokenizer import CharTokenizer
 
 __all__ = [
     "BPETokenizer",
+    "ByteTokenizer",
     "CharTokenizer",
     "load_tokenizer",
     "save_tokenizer",
@@ -21,6 +23,8 @@ def tokenizer_from_state(state):
         return CharTokenizer.from_dict(state)
     if kind == "bpe":
         return BPETokenizer.from_dict(state)
+    if kind == "byte":
+        return ByteTokenizer.from_dict(state)
     raise ValueError(f"unknown tokenizer type {kind!r}")
 
 
@@ -38,7 +42,27 @@ def with_special_tokens(tok, special_tokens):
         return CharTokenizer.from_chars(tok.chars, wanted)
     if type(tok) is BPETokenizer:
         return BPETokenizer(tok.chars, tok.merges, wanted)
+    if type(tok) is ByteTokenizer:
+        return ByteTokenizer(wanted)
     raise TypeError(f"unsupported tokenizer type {type(tok).__name__}")
+
+
+class _TokenDecoder:
+    def __init__(self, tok):
+        self.tok = tok
+
+    def push(self, token_id):
+        return self.tok.decode([token_id])
+
+    def finish(self):
+        return ""
+
+
+def incremental_decoder(tok):
+    """Decode streamed tokens, buffering partial UTF-8 byte sequences."""
+    if isinstance(tok, ByteTokenizer):
+        return tok.incremental_decoder()
+    return _TokenDecoder(tok)
 
 
 def save_tokenizer(tok, path):

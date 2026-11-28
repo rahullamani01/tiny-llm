@@ -11,6 +11,7 @@ import torch
 
 from chat.template import CHAT_SPECIAL_TOKENS, build_chat_prompt
 from inference.generate import load_model
+from tokenizer import incremental_decoder
 from utils import get_device, set_seed
 
 DEFAULT_SYSTEM = "You are a helpful, concise assistant."
@@ -103,6 +104,7 @@ def reply(model, tok, messages, args, state, system=None):
     idx = torch.tensor([ids], dtype=torch.long, device=next(model.parameters()).device)
 
     pieces = []
+    decoder = incremental_decoder(tok)
     for out in model.generate_stream(
         idx,
         state["max_new_tokens"],
@@ -115,10 +117,13 @@ def reply(model, tok, messages, args, state, system=None):
         token_id = out[0, -1].item()
         if tok.is_special_id(token_id):
             break
-        piece = tok.decode([token_id])
+        piece = decoder.push(token_id)
         pieces.append(piece)
         print(piece, end="", flush=True)
 
+    tail = decoder.finish()
+    pieces.append(tail)
+    print(tail, end="", flush=True)
     return "".join(pieces)
 
 

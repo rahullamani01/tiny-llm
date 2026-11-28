@@ -6,6 +6,7 @@ without web dependencies.
 import torch
 
 from chat.template import build_chat_prompt
+from tokenizer import incremental_decoder
 from utils import set_seed
 
 
@@ -64,6 +65,7 @@ def iter_chat_events(
     model.eval()
 
     pieces = []
+    decoder = incremental_decoder(tok)
     with torch.no_grad():
         for out in model.generate_stream(
             idx,
@@ -77,8 +79,14 @@ def iter_chat_events(
             token_id = out[0, -1].item()
             if tok.is_special_id(token_id):
                 break
-            piece = tok.decode([token_id])
-            pieces.append(piece)
-            yield {"token": piece}
+            piece = decoder.push(token_id)
+            if piece:
+                pieces.append(piece)
+                yield {"token": piece}
+
+    tail = decoder.finish()
+    if tail:
+        pieces.append(tail)
+        yield {"token": tail}
 
     yield {"done": True, "content": "".join(pieces)}

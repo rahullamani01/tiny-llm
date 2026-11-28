@@ -6,7 +6,7 @@ import torch
 
 from checkpoint import load_checkpoint, save_checkpoint
 from model.model import TinyGPT
-from tokenizer import BPETokenizer, CharTokenizer, load_tokenizer, save_tokenizer
+from tokenizer import BPETokenizer, ByteTokenizer, CharTokenizer, load_tokenizer, save_tokenizer
 from training.dataset import get_batch, split_data
 from training.evaluate import evaluate_loss
 from training.schedule import get_lr
@@ -41,7 +41,7 @@ def parse_args():
     p.add_argument("--data", default="data/training.txt")
     p.add_argument("--out", default="checkpoints/tinygpt.pt", help="latest/resumable checkpoint")
     p.add_argument("--best-out", default=None, help="best-val checkpoint (default: next to --out)")
-    p.add_argument("--tokenizer", choices=["char", "bpe"], default="char")
+    p.add_argument("--tokenizer", choices=["char", "bpe", "byte"], default="char")
     p.add_argument("--vocab-size", type=int, default=512,
                    help="BPE vocabulary size, including base characters")
     p.add_argument("--bpe-max-chars", type=int, default=100_000,
@@ -171,6 +171,8 @@ def build_tokenizer(args, text):
     """Build a char tokenizer, or load/train a BPE vocabulary."""
     if args.tokenizer == "char":
         return CharTokenizer(text), None
+    if args.tokenizer == "byte":
+        return ByteTokenizer(), None
 
     if args.vocab_size < 1:
         raise SystemExit("error: --vocab-size must be >= 1")

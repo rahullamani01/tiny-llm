@@ -25,6 +25,7 @@ from checkpoint import load_checkpoint, save_checkpoint
 from model.model import TinyGPT
 from tokenizer import (
     BPETokenizer,
+    ByteTokenizer,
     CharTokenizer,
     load_tokenizer,
     save_tokenizer,
@@ -286,8 +287,8 @@ def build_tokenizer(args, conversations, base_ckpt=None):
         return with_special_tokens(tok, CHAT_SPECIAL_TOKENS), args.vocab_file
 
     text = conversation_text(conversations, system=args.system)
-    if args.tokenizer == "char":
-        tok = CharTokenizer(text)
+    if args.tokenizer in ("char", "byte"):
+        tok = CharTokenizer(text) if args.tokenizer == "char" else ByteTokenizer()
         specials = with_special_tokens(tok, CHAT_SPECIAL_TOKENS)
         path = args.vocab_file or os.path.join(
             os.path.dirname(args.out) or ".", "chat-vocab.json"
@@ -317,7 +318,7 @@ def parse_args():
     p.add_argument("--best-out", default=None)
     p.add_argument("--init-from", default=None, help="pretrained Base checkpoint")
     p.add_argument("--resume", action="store_true", help="continue from --out")
-    p.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
+    p.add_argument("--tokenizer", choices=["char", "bpe", "byte"], default="bpe")
     p.add_argument("--vocab-file", default=None)
     p.add_argument("--vocab-size", type=int, default=2048)
     p.add_argument("--bpe-max-chars", type=int, default=200_000)
