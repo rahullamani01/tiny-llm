@@ -275,6 +275,17 @@ python -m inference.evaluate --ckpt checkpoints/best.pt --batch-size 16
 
 This prints cross-entropy loss and perplexity on the chosen split.
 
+For a chat checkpoint and held-out conversation JSONL, evaluate every assistant
+target with:
+
+```bash
+python -m inference.evaluate_chat --ckpt checkpoints/chat/chat-best.pt \
+    --data data/cache/chat-val.jsonl --output checkpoints/chat/validation-report.json
+```
+
+See [docs/experiments/full-chat-evaluation.md](docs/experiments/full-chat-evaluation.md)
+for the scoring method and its limitations.
+
 ## Generate text
 
 One-shot generation (defaults: `temperature=0.8`, `top-k=40`):

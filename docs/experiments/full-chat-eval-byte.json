@@ -1,0 +1,16 @@
+{
+  "checkpoint_sha256": "5e8ffcb31f78e4944ba43cd7d9a8f54a6156e829f0b061e42f69af4da8ea7fb1",
+  "data_sha256": "6cef948e2859de3a4e2778b81fe422e88df80d7b0bb085e2d5d646a9febda8b7",
+  "device": "mps",
+  "torch_version": "2.14.1",
+  "context_tokens": 128,
+  "fallback_system": null,
+  "method": "conversation_separated_nonoverlapping_chunks_v1",
+  "metrics": {
+    "conversations": 300,
+    "scored_conversations": 300,
+    "assistant_target_tokens": 79404,
+    "loss_nats_per_token": 2.5876717034211825,
+    "perplexity": 13.298772043663796
+  }
+}
