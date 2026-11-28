@@ -40,6 +40,8 @@ For a reproducible small character-vs-BPE baseline, see
 [docs/experiments/tokenizer-baseline.md](docs/experiments/tokenizer-baseline.md).
 The [longer comparison](docs/experiments/tokenizer-long.md) adds learning curves,
 multiple seeds and an estimated bits-per-byte metric.
+See the [corrected chat-training experiment](docs/experiments/chat-phase.md)
+for a candid first base-vs-SFT prompt inspection.
 
 ## Roadmap
 - [x] Character tokenizer

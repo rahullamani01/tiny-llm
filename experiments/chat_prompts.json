@@ -1,0 +1,7 @@
+[
+  {"category": "greeting", "prompt": "Hello! How are you?"},
+  {"category": "arithmetic", "prompt": "What is 2 plus 2?"},
+  {"category": "instruction", "prompt": "Name one color."},
+  {"category": "reasoning", "prompt": "If it rains, should I take an umbrella?"},
+  {"category": "uncertainty", "prompt": "What is the weather today?"}
+]

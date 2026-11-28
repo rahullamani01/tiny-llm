@@ -1,0 +1,72 @@
+{
+  "base_sha256": "0d64e7260a669efeb245356e6c3b9ea1a6cd097dc0cec23032b47c3cdfae0523",
+  "chat_sha256": "7d0cfe7a6895572411883105a9ae41981c45996630749478cb028ef66e795b84",
+  "prompts_sha256": "481e55dae77c7c4abf0c28236c3f427952a7d1c226c33a85e98cb2fdc21f7838",
+  "device": "mps",
+  "torch_version": "2.14.1",
+  "max_new_tokens": 64,
+  "decoding": "greedy",
+  "chat_system": "You are a helpful, concise assistant.",
+  "results": [
+    {
+      "category": "greeting",
+      "prompt": "Hello! How are you?",
+      "base": {
+        "text": "The ciphownociphere is bociphould bociphere poviph as sh as shere phownovipociphownove",
+        "stop": "token_limit"
+      },
+      "chat": {
+        "text": "The shere is loce is loclover here is locloce is loce is loce is loclocloce is loce is loce is loc",
+        "stop": "token_limit"
+      }
+    },
+    {
+      "category": "arithmetic",
+      "prompt": "What is 2 plus 2?",
+      "base": {
+        "text": "The povis a povis a povis a povipovipovipovipovipovipovipovipovipovipoviph as ",
+        "stop": "token_limit"
+      },
+      "chat": {
+        "text": "The man of shere man of shere man of shere man of shere man of shere man of shere man of shere man of sher",
+        "stop": "token_limit"
+      }
+    },
+    {
+      "category": "instruction",
+      "prompt": "Name one color.",
+      "base": {
+        "text": "Create a fly, Anovis a cipocipoviphownoviph as sh as sh as sh as shere povipoviph as s",
+        "stop": "token_limit"
+      },
+      "chat": {
+        "text": "The man of shere is locloce is loclocloce is loce is locloclocloclocloce loce here here is ",
+        "stop": "token_limit"
+      }
+    },
+    {
+      "category": "reasoning",
+      "prompt": "If it rains, should I take an umbrella?",
+      "base": {
+        "text": "Input:\nAnotripriph fly, shownoviph as should be phownotriphownocipotriphownoviph as ",
+        "stop": "token_limit"
+      },
+      "chat": {
+        "text": "The man of shere man of shere man of shere man of shere here for of shere here here man of shere man of sher",
+        "stop": "token_limit"
+      }
+    },
+    {
+      "category": "uncertainty",
+      "prompt": "What is the weather today?",
+      "base": {
+        "text": "The cipriphere for of should bletriph as sh as shownoviph as sh as sh as sh as shownotriph as ",
+        "stop": "token_limit"
+      },
+      "chat": {
+        "text": "The shere is loclocloce is loce is locloce is loce is loce is locloclocloce is loclocloce ",
+        "stop": "token_limit"
+      }
+    }
+  ]
+}
